@@ -58,10 +58,14 @@ Telegram bot. Mahsulotlarni Excel fayl yoki rasm orqali beresiz — qolganini bo
 **Bepul web variantini ishlatmoqchi bo'lsangiz** — `render-web.yaml` ni
 `render.yaml` deb nomlang va ikki narsani qiling:
 
-1. **Pinger.** [uptimerobot.com](https://uptimerobot.com) yoki
-   [cron-job.org](https://cron-job.org) da har 10 daqiqada
-   `https://<servis-nomi>.onrender.com/health` manzilini chaqiradigan monitor
-   yarating. Bo'lmasa servis uxlab qoladi va 09:00 dagi post chiqmay ketadi.
+1. **Uxlab qolmaslik — avtomatik.** Bot o'ziga har 10 daqiqada so'rov yuborib
+   turadi (`RENDER_EXTERNAL_URL` o'zgaruvchisini Render o'zi beradi), shuning
+   uchun tashqi pinger kerak emas. Log'da shunday qator ko'rinadi:
+   `Uxlab qolmaslik uchun har 10 daqiqada .../health chaqiriladi`.
+
+   > Bepul plan oyiga **750 soat** beradi. Bitta servis 24/7 ishlasa ≈730 soat —
+   > sig'adi. Lekin shu hisobda boshqa bepul servisingiz bo'lsa, limit oshadi va
+   > oy oxirida hammasi to'xtaydi.
 
 2. **Zaxira kanali.** Botning "seyfi" — bazani shu yerda saqlaydi:
 

@@ -14,7 +14,7 @@ import backup
 import db
 import handlers
 import scheduler
-from config import ADMIN_IDS, BACKUP_CHAT, BOT_TOKEN, TZ_NAME
+from config import ADMIN_IDS, BACKUP_CHAT, BOT_TOKEN, SELF_URL, TZ_NAME
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,6 +38,10 @@ async def health_server() -> None:
     await runner.setup()
     await web.TCPSite(runner, "0.0.0.0", int(port)).start()
     log.info("Health server: 0.0.0.0:%s", port)
+    if SELF_URL:
+        log.info("Uxlab qolmaslik uchun har 10 daqiqada %s/health chaqiriladi", SELF_URL)
+    else:
+        log.warning("RENDER_EXTERNAL_URL yo'q — bepul planda servis uxlab qolishi mumkin")
 
 
 async def main() -> None:

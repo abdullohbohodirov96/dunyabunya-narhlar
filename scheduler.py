@@ -8,7 +8,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 import db
 import poster
-from config import TZ
+from config import SELF_URL, TZ
 
 log = logging.getLogger("scheduler")
 _sched: AsyncIOScheduler | None = None
@@ -88,6 +88,15 @@ async def reload_jobs() -> list[tuple[int, int]]:
         max_instances=1,
     )
 
+    if SELF_URL:
+        _sched.add_job(
+            keep_awake,
+            IntervalTrigger(minutes=10, timezone=TZ),
+            id="keepalive",
+            coalesce=True,
+            max_instances=1,
+        )
+
     rh, rm = poster._hm(settings.get("report_at", "21:00"), (21, 0))
     _sched.add_job(
         poster.daily_report,
@@ -112,6 +121,19 @@ async def reload_jobs() -> list[tuple[int, int]]:
 
     log.info("Jadval yangilandi: %s (prays: %s)", times, weekly)
     return times
+
+
+async def keep_awake() -> None:
+    """O'ziga so'rov yuboradi — Render servisni uxlatmasligi uchun."""
+    import aiohttp
+
+    try:
+        timeout = aiohttp.ClientTimeout(total=20)
+        async with aiohttp.ClientSession(timeout=timeout) as s:
+            async with s.get(f"{SELF_URL}/health") as r:
+                log.debug("keep-awake: %s", r.status)
+    except Exception as e:
+        log.warning("keep-awake ishlamadi: %s", e)
 
 
 def next_runs(limit: int = 6) -> list[str]:

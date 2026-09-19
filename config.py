@@ -22,6 +22,11 @@ DB_PATH = os.getenv("DB_PATH", "/data/bot.db")
 # baza shu kanalga fayl qilib tashlanadi va pin qilinadi.
 BACKUP_CHAT = os.getenv("BACKUP_CHAT", "").strip()
 
+# Render web service o'z manzilini shu o'zgaruvchida beradi.
+# Bepul planda servis 15 daqiqa jimlikdan keyin uxlaydi — bot o'ziga
+# har 10 daqiqada so'rov yuborib, uyg'oq turadi (tashqi pinger kerak emas).
+SELF_URL = (os.getenv("RENDER_EXTERNAL_URL", "") or os.getenv("SELF_URL", "")).strip().rstrip("/")
+
 TZ_NAME = os.getenv("TZ", "Asia/Tashkent")
 TZ = ZoneInfo(TZ_NAME)
 
