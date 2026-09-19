@@ -238,12 +238,18 @@ async def _is_quiet(settings: dict) -> bool:
 
 
 async def alert_empty(bot: Bot, force: bool = False) -> None:
-    """Navbatda mahsulot kam qolsa — mas'ulga va adminlarga eslatma."""
+    """Narx tugasa yoki eskirsa — mas'ulga va adminlarga eslatma."""
     settings = await db.all_settings()
-    left = await db.ready_count()
-    threshold = int(settings.get("low_stock", "5") or 5)
+    prays = settings.get("post_mode", "pdf") != "mahsulot"
+    left = await db.queue_left()
+    # prays rejimida kategoriyalar aylanadi — faqat umuman narx qolmasa muammo.
+    # mahsulot rejimida esa har mahsulot bir marta chiqadi, shuning uchun zaxira kerak.
+    threshold = 0 if prays else int(settings.get("low_stock", "5") or 5)
+    stale_days = int(settings.get("stale_days", "7") or 7)
+    age = await db.price_age_days()
+    stale = age is not None and age >= stale_days
 
-    if left > threshold and not force:
+    if left > threshold and not stale and not force:
         await db.set("alert_active", "0")
         return
     if await _is_quiet(settings) and not force:
@@ -302,10 +308,15 @@ async def daily_report(bot: Bot) -> None:
     lines += ["", f"📊 Reja: {plan} ta · Bajarildi: {len(posts)} ta"]
     if len(posts) < plan:
         lines.append(f"⚠️ {plan - len(posts)} ta post qolib ketdi.")
-    unit_word = "kategoriya" if settings.get("post_mode", "pdf") != "mahsulot" else "mahsulot"
-    lines.append(f"📦 Navbatda: {left} ta {unit_word}")
-    if left < plan:
-        lines.append("\n🔴 Ertaga uchun yetmaydi — yangi narxlar ro'yxatini yuboring!")
+    prays = settings.get("post_mode", "pdf") != "mahsulot"
+    lines.append(f"📦 Navbatda: {left} ta " + ("kategoriya" if prays else "mahsulot"))
+    if left == 0:
+        lines.append("\n🔴 Narx qolmadi — yangi ro'yxat yuboring!")
+    elif not prays and left < plan:
+        lines.append("\n🔴 Ertaga uchun yetmaydi — yangi mahsulotlar yuboring!")
+    age = await db.price_age_days()
+    if age is not None and age >= int(settings.get("stale_days", "7") or 7):
+        lines.append(f"⚠️ Narxlar {age} kundan beri yangilanmadi.")
 
     targets = list(ADMIN_IDS)
     manager = (settings.get("manager_id") or "").strip()

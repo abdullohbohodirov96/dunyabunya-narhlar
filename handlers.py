@@ -10,7 +10,6 @@ from aiogram.types import (
 )
 
 import backup
-import cardmaker
 import db
 import parsing
 import poster
@@ -347,7 +346,7 @@ async def cmd_queue(msg: Message):
                 f"📅 Yetadi: ~{ready // per_day} kunga\n")
 
     await msg.answer(
-        f"📦 <b>Navbat</b>\n\n" + body
+        "📦 <b>Navbat</b>\n\n" + body
         + f"⚠️ Narxsiz: {await db.no_price_count()} ta\n"
         + (f"🕓 Narxlar {age} kun oldin yangilangan\n" if age is not None else "")
         + (f"\n⏰ Keyingi postlar: {', '.join(nxt)}" if nxt else "")
@@ -405,7 +404,7 @@ async def cmd_preview(msg: Message, command: CommandObject):
         category, items = picked
         caption = __import__("formatter").render_product(
             {"name": category.upper(), "category": category}, settings)
-        note = f"\n\n<i>👁 Ko'rish rejimi — kanalga joylanmadi</i>"
+        note = "\n\n<i>👁 Ko'rish rejimi — kanalga joylanmadi</i>"
         s2 = dict(settings); s2["sana"] = f"{db.now():%d.%m.%Y}"
         if settings.get("post_mode", "pdf") in ("pdf", "prays"):
             import pricebook
@@ -472,7 +471,7 @@ async def cmd_stats(msg: Message):
     async with db.conn().execute("SELECT COUNT(*) c FROM products WHERE active = 1") as cur:
         prods = (await cur.fetchone())["c"]
 
-    lines = [f"📊 <b>Statistika</b>\n",
+    lines = ["📊 <b>Statistika</b>\n",
              f"Bugun: <b>{len(posts)}/{max(1, len(times))}</b> ta post",
              f"Jami postlar: {total} ta",
              f"Bazadagi mahsulot: {prods} ta",
@@ -684,7 +683,7 @@ async def got_photo(msg: Message):
 
 async def _save_product(msg: Message, data: dict, file_id: str = ""):
     """Nomi bo'yicha bazadan topadi (rasmni ulaydi) yoki yangi mahsulot ochadi."""
-    from matching import best_match, normalize
+    from matching import best_match
 
     existing = await db.find_by_name(data["name"])
     if existing is None:
@@ -709,8 +708,8 @@ async def _save_product(msg: Message, data: dict, file_id: str = ""):
         return
 
     if not data.get("price"):
-        did = await db.add_draft(msg.from_user.id, photo_file_id=file_id,
-                                 name=data["name"], need="price")
+        await db.add_draft(msg.from_user.id, photo_file_id=file_id,
+                           name=data["name"], need="price")
         await msg.answer(f"📝 <b>{data['name']}</b>\n\nEndi <b>narxini</b> yozing "
                          f"(faqat raqam, masalan <code>52000</code>).")
         return
