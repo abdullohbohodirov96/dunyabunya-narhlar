@@ -341,11 +341,13 @@ async def categories() -> list[str]:
 async def category_items(name: str):
     async with conn().execute(
         "SELECT * FROM products WHERE active = 1 AND price <> '' "
-        "AND COALESCE(NULLIF(TRIM(category), ''), 'Boshqa mahsulotlar') = ? "
-        "ORDER BY brand, name",
+        "AND COALESCE(NULLIF(TRIM(category), ''), 'Boshqa mahsulotlar') = ?",
         (name,),
     ) as cur:
-        return [dict(r) for r in await cur.fetchall()]
+        rows = [dict(r) for r in await cur.fetchall()]
+    from pricebook import natural_key
+    rows.sort(key=lambda r: (natural_key(r.get("brand") or ""), natural_key(r.get("name") or "")))
+    return rows
 
 
 async def pick_next_category():

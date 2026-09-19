@@ -13,10 +13,17 @@ COLUMN_ALIASES = {
     "name": [
         "nom", "nomi", "mahsulot", "mahsulot nomi", "tovar", "tovar nomi", "maxsulot",
         "название", "наименование", "товар", "продукт", "name", "product", "title",
+        "отображаемое имя", "display name", "полное наименование",
     ],
     "price": [
         "narx", "narxi", "narh", "yangi narx", "sotuv narxi", "summa",
-        "цена", "стоимость", "price", "new price", "cost",
+        "chakana", "chakana narx", "chakana narxi", "dona narxi",
+        "цена", "стоимость", "розничная", "розница", "розничная цена",
+        "price", "new price", "cost", "retail",
+    ],
+    "wholesale": [
+        "ulgurji", "ulgurji narx", "ulgurji narxi", "optom",
+        "оптовая", "опт", "оптовая цена", "wholesale",
     ],
     "old_price": [
         "eski narx", "eski narxi", "avvalgi narx", "старая цена", "old price", "было",
@@ -72,11 +79,48 @@ def _find_header(rows) -> tuple[int, dict]:
     return best_i, best_map
 
 
+CODE_PREFIX = re.compile(r"^\s*[\[\(]\s*[A-Za-z0-9][A-Za-z0-9._/-]*\s*[\]\)]\s*")
+UPPER_BRAND = re.compile(r"\b([A-ZА-ЯЎҚҒҲ]{3,}(?:[- ][A-ZА-ЯЎҚҒҲ]{2,})?)\b")
+UNIT_LIKE = {"MM", "SM", "KG", "GR", "ML", "LED", "PVC", "UV", "GKL", "GKLV", "OSB", "MDF"}
+
+
+def clean_name(raw: str) -> str:
+    """'[0066-01890] Bazalt PETRAWOOL (100mm)' -> 'Bazalt PETRAWOOL (100mm)'"""
+    s = str(raw or "").strip()
+    prev = None
+    while s != prev:                 # bir nechta kod ketma-ket bo'lishi mumkin
+        prev = s
+        s = CODE_PREFIX.sub("", s)
+    return re.sub(r"\s{2,}", " ", s).strip(" -–—|")
+
+
+def guess_category(name: str) -> str:
+    """Kategoriya ustuni bo'lmasa — nomning birinchi so'zidan."""
+    first = clean_name(name).split()
+    if not first:
+        return ""
+    w = first[0].strip(".,;:")
+    return w.capitalize() if len(w) > 2 else ""
+
+
+def guess_brand(name: str, category: str = "") -> str:
+    """Brend ustuni bo'lmasa — nomdagi BOSH HARFLI so'z (PETRAWOOL, EVEREST)."""
+    body = clean_name(name)
+    if category:
+        body = re.sub(r"^" + re.escape(category), "", body, flags=re.IGNORECASE).strip()
+    for m in UPPER_BRAND.finditer(body):
+        cand = m.group(1).strip()
+        if cand.upper() in UNIT_LIKE or cand.isdigit():
+            continue
+        return cand.title() if len(cand) > 3 else cand
+    return ""
+
+
 def _clean_price(v) -> str:
     if v in (None, ""):
         return ""
     if isinstance(v, (int, float)):
-        return str(int(v)) if float(v).is_integer() else str(v)
+        return str(int(round(float(v))))
     s = str(v).strip()
     s = re.sub(r"(so'm|som|сум|sum|uzs|руб)\.?", "", s, flags=re.IGNORECASE).strip()
     digits = re.sub(r"[^\d]", "", s.replace(".", "").replace(",", ""))
@@ -112,8 +156,12 @@ def _rows_from_csv(data: bytes) -> list[list]:
     return [row for row in csv.reader(io.StringIO(text), delimiter=delim)]
 
 
-def parse(data: bytes, filename: str) -> tuple[list[dict], str]:
-    """Faylni o'qib, mahsulotlar ro'yxatini qaytaradi. (mahsulotlar, xabar)"""
+def parse(data: bytes, filename: str, default_category: str = "") -> tuple[list[dict], str]:
+    """Faylni o'qib, mahsulotlar ro'yxatini qaytaradi. (mahsulotlar, xabar)
+
+    default_category — fayl bilan birga yozilgan kategoriya nomi (caption).
+    Bo'sh bo'lsa, kategoriya mahsulot nomining birinchi so'zidan olinadi.
+    """
     lower = filename.lower()
     if lower.endswith((".xlsx", ".xlsm", ".xltx")):
         rows = _rows_from_xlsx(data)
@@ -147,20 +195,24 @@ def parse(data: bytes, filename: str) -> tuple[list[dict], str]:
             v = row[i]
             return "" if v is None else str(v).strip()
 
-        name = cell("name")
+        name = clean_name(cell("name"))
         if not name or _norm_header(name) in COLUMN_ALIASES["name"]:
             continue
         price = _clean_price(row[mapping["price"]]) if "price" in mapping and mapping["price"] < len(row) else ""
+        if not price and "wholesale" in mapping and mapping["wholesale"] < len(row):
+            price = _clean_price(row[mapping["wholesale"]])
         old = _clean_price(row[mapping["old_price"]]) if "old_price" in mapping and mapping["old_price"] < len(row) else ""
         if not price:
             skipped += 1
+        category = cell("category") or default_category or guess_category(name)
+        brand = cell("brand") or guess_brand(name, category)
         items.append({
             "name": name,
             "price": price,
             "old_price": old,
             "unit": cell("unit"),
-            "category": cell("category"),
-            "brand": cell("brand"),
+            "category": category,
+            "brand": brand,
             "note": cell("note"),
         })
 

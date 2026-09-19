@@ -11,6 +11,7 @@ from aiogram.types import (
 
 import backup
 import db
+import formatter
 import parsing
 import poster
 import pricelist
@@ -32,6 +33,7 @@ HELP = """<b>🏗 dunyabunya — narxlar boti</b>
 
 <b>Mahsulot qo'shish</b>
 • 📄 Excel/CSV faylni shunchaki yuboring — barcha qatorlar navbatga tushadi
+   (tagiga kategoriya nomini yozsangiz, hamma qatorga o'shani qo'yadi)
 • 🖼 Rasm yuboring, tagiga yozing:
    <code>Sement M-400 — 52000 so'm/qop</code>
    (nomi Excel'da bor bo'lsa, rasm o'sha mahsulotga ulanadi)
@@ -620,7 +622,10 @@ async def got_document(msg: Message):
     status = await msg.answer("⏳ Fayl o'qilmoqda…")
     buf = io.BytesIO()
     await msg.bot.download(doc, destination=buf)
-    items, info = pricelist.parse(buf.getvalue(), name)
+
+    # fayl tagiga kategoriya yozilgan bo'lsa — hamma qatorga o'sha qo'llanadi
+    caption = (msg.caption or "").strip()
+    items, info = pricelist.parse(buf.getvalue(), name, default_category=caption)
     if not items:
         await status.edit_text(info)
         return
@@ -634,13 +639,27 @@ async def got_document(msg: Message):
     await db.set("last_import_at", db.iso())
     cats = await db.categories()
     per_day = max(1, len(scheduler.parse_times(await db.get("post_times"))))
+
+    # birinchi uchta qator — tekshirib ko'rish uchun
+    sample = []
+    for it in items[:3]:
+        bits = [b for b in (it["category"], it["brand"]) if b]
+        sample.append(
+            f"• {it['name'][:44]}\n   {formatter.money(it['price'])} so'm"
+            + (f" / {it['unit']}" if it["unit"] else "")
+            + (f"  ·  {' · '.join(bits)}" if bits else "")
+        )
+
     await status.edit_text(
         f"✅ <b>{len(items)}</b> ta qator o'qildi\n"
         f"➕ Yangi: {added} ta · 🔄 Yangilandi: {updated} ta\n"
         f"{info}\n\n"
-        f"📂 Kategoriyalar: <b>{len(cats)}</b> ta "
-        f"({', '.join(cats[:6])}{'…' if len(cats) > 6 else ''})\n"
+        + ("<b>Shunday tushundim:</b>\n" + "\n".join(sample) + "\n\n" if sample else "")
+        + f"📂 Kategoriyalar ({len(cats)} ta): "
+        f"{', '.join(cats[:8])}{'…' if len(cats) > 8 else ''}\n"
         f"📅 Kuniga {per_day} ta post — har kategoriya ~{max(1, len(cats) // per_day)} kunda bir marta\n\n"
+        "Kategoriya noto'g'ri bo'lsa: faylni qayta yuboring va "
+        "<b>tagiga kategoriya nomini yozing</b>.\n\n"
         "Ko'rish: <code>/korish</code>  ·  Hoziroq joylash: <code>/hozir</code>"
     )
     await backup.save(msg.bot, "excel import")

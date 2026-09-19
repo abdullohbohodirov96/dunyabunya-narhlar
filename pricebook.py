@@ -65,13 +65,21 @@ def _money(v) -> str:
     return str(v or "").strip()
 
 
+def natural_key(text: str):
+    """'50mm' 100mm dan oldin kelsin — raqamlar raqam sifatida solishtiriladi."""
+    import re as _re
+    parts = _re.split(r"(\d+)", str(text or "").lower())
+    return [int(p) if p.isdigit() else p for p in parts]
+
+
 def group_by_category(products) -> "OrderedDict[str, list]":
     groups: "OrderedDict[str, list]" = OrderedDict()
     for p in products:
         cat = (p.get("category") or "Boshqa mahsulotlar").strip() or "Boshqa mahsulotlar"
         groups.setdefault(cat, []).append(p)
     for items in groups.values():
-        items.sort(key=lambda x: (x.get("brand") or "", x.get("name") or ""))
+        items.sort(key=lambda x: (natural_key(x.get("brand") or ""),
+                                  natural_key(x.get("name") or "")))
     return OrderedDict(sorted(groups.items(), key=lambda kv: kv[0].lower()))
 
 
