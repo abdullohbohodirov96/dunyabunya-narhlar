@@ -79,7 +79,9 @@ async def main() -> None:
             pass
 
     await health_server()
-    await bot.delete_webhook(drop_pending_updates=True)
+    # Servis uxlab qolganda yuborilgan fayllar yo'qolmasin —
+    # uyg'onganda Telegram ularni yetkazib beradi.
+    await bot.delete_webhook(drop_pending_updates=False)
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:

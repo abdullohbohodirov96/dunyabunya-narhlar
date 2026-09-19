@@ -328,20 +328,31 @@ async def posts_today():
         return await cur.fetchall()
 
 
-# ------------------------------------------------- kategoriya navbati (prays)
+# ------------------------------------------------- post guruhlari (prays)
+CAT_SQL = "COALESCE(NULLIF(TRIM(category), ''), 'Boshqa mahsulotlar')"
+# kategoriya + brend: "Bazalt EVEREST"; brend bo'lmasa faqat kategoriya
+GROUP_SQL = f"TRIM({CAT_SQL} || CASE WHEN TRIM(COALESCE(brand, '')) = '' " \
+            "THEN '' ELSE ' ' || TRIM(brand) END)"
+
+
+async def _group_expr() -> str:
+    return GROUP_SQL if (await get("group_by", "brend")) == "brend" else CAT_SQL
+
+
 async def categories() -> list[str]:
-    """Narxi bor faol mahsulotlar kategoriyalari."""
+    """Post guruhlari — sozlamaga qarab kategoriya yoki kategoriya+brend."""
+    expr = await _group_expr()
     async with conn().execute(
-        "SELECT DISTINCT COALESCE(NULLIF(TRIM(category), ''), 'Boshqa mahsulotlar') c "
-        "FROM products WHERE active = 1 AND price <> '' ORDER BY c"
+        f"SELECT DISTINCT {expr} g FROM products "
+        "WHERE active = 1 AND price <> '' ORDER BY g"
     ) as cur:
-        return [r["c"] for r in await cur.fetchall()]
+        return [r["g"] for r in await cur.fetchall()]
 
 
 async def category_items(name: str):
+    expr = await _group_expr()
     async with conn().execute(
-        "SELECT * FROM products WHERE active = 1 AND price <> '' "
-        "AND COALESCE(NULLIF(TRIM(category), ''), 'Boshqa mahsulotlar') = ?",
+        f"SELECT * FROM products WHERE active = 1 AND price <> '' AND {expr} = ?",
         (name,),
     ) as cur:
         rows = [dict(r) for r in await cur.fetchall()]

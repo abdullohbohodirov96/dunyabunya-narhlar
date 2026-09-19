@@ -143,6 +143,11 @@ kuniga bir martadan chiqadi. 20 ta kategoriya bo'lsa — har biri 4 kunda bir ma
 
 Rasm-jadval ko'rinishini afzal ko'rsangiz: `/rejim rasm`.
 
+**Guruhlash.** Standart holatda har brend alohida post bo'ladi —
+`BAZALT EVEREST` va `BAZALT PETRAWOOL` ikki xil postda chiqadi. Butun
+kategoriyani bitta postga yig'ish uchun: `/guruh kategoriya`. Qaytarish:
+`/guruh brend`. Hozirgi guruhlar ro'yxatini `/guruh` ko'rsatadi.
+
 ### Rasm bilan (ixtiyoriy)
 
 Rasmni yuborib, tagiga yozing:

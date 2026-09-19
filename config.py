@@ -52,6 +52,10 @@ DEFAULTS = {
     #   "rasm"     = kategoriya narxlari rasm-jadval
     #   "mahsulot" = bitta mahsulot kartochkasi
     "post_mode": "pdf",
+    # post qanday guruhlansin:
+    #   "brend"      = har brend alohida post (BAZALT EVEREST, BAZALT PETRAWOOL)
+    #   "kategoriya" = butun kategoriya bitta post (BAZALT)
+    "group_by": "brend",
     # narxlar shuncha kundan beri yangilanmasa — mas'ulga eslatma
     "stale_days": "7",
     # 1 = brend dizaynidagi kartochka yasalsin, 0 = oddiy rasm yuborilsin

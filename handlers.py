@@ -51,7 +51,7 @@ HELP = """<b>🏗 dunyabunya — narxlar boti</b>
 /vaqt 09:00,11:30,14:00,16:30,19:00 — post vaqtlari
 /dokon dunyabunya | +998(91)785-00-90 | @kanal
 /logo — logo yuklash (keyingi rasmni logo qilib oladi)
-/rejim — post turi (pdf / rasm / mahsulot)\n/dizayn — brend kartochkani yoqish/o'chirish
+/rejim — post turi (pdf / rasm / mahsulot)\n/guruh — brend yoki kategoriya bo'yicha\n/dizayn — brend kartochkani yoqish/o'chirish
 /shablon — post matni shabloni\n/aloqa — raqam bog'lanadigan havola
 /pauza · /davom — to'xtatish / davom ettirish\n/zaxirakanal — zaxira kanalini ulash\n/zaxira — bazani hoziroq saqlash
 /statistika · /eksport · /id
@@ -274,6 +274,38 @@ async def cmd_mode(msg: Message, command: CommandObject):
         return
     await db.set("post_mode", arg)
     await msg.answer(f"✅ Rejim: <b>{names[arg]}</b>\n\nKo'rish: <code>/korish</code>")
+
+
+@router.message(Command("guruh"))
+async def cmd_group(msg: Message, command: CommandObject):
+    """Post qanday guruhlansin: brend bo'yicha yoki butun kategoriya."""
+    if await deny(msg):
+        return
+    arg = (command.args or "").strip().lower()
+    names = {
+        "brend": "🏷 Har brend alohida post",
+        "kategoriya": "📂 Butun kategoriya bitta post",
+    }
+    if arg not in names:
+        cur = await db.get("group_by", "brend")
+        groups = await db.categories()
+        await msg.answer(
+            f"Hozirgi guruhlash: <b>{names.get(cur, cur)}</b>\n"
+            f"Hozir {len(groups)} ta post guruhi bor:\n"
+            + "\n".join(f"• {g}" for g in groups[:12])
+            + ("\n…" if len(groups) > 12 else "")
+            + "\n\n<code>/guruh brend</code> — BAZALT EVEREST, BAZALT PETRAWOOL alohida\n"
+              "<code>/guruh kategoriya</code> — hammasi bitta BAZALT postida"
+        )
+        return
+    await db.set("group_by", arg)
+    groups = await db.categories()
+    await msg.answer(
+        f"✅ {names[arg]}\n\nEndi {len(groups)} ta post guruhi:\n"
+        + "\n".join(f"• {g}" for g in groups[:12])
+        + ("\n…" if len(groups) > 12 else "")
+        + "\n\nKo'rish: <code>/korish</code>"
+    )
 
 
 @router.message(Command("dizayn"))
