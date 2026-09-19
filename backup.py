@@ -18,6 +18,15 @@ from config import BACKUP_CHAT, DB_PATH
 log = logging.getLogger("backup")
 
 
+async def chat_id() -> str:
+    """Zaxira kanali: /zaxirakanal bilan qo'yilgani, bo'lmasa BACKUP_CHAT env."""
+    try:
+        import db
+        return (await db.get("backup_chat", "")).strip() or BACKUP_CHAT
+    except Exception:
+        return BACKUP_CHAT
+
+
 def _size(path: str) -> int:
     try:
         return os.path.getsize(path)
@@ -27,13 +36,14 @@ def _size(path: str) -> int:
 
 async def restore_if_needed(bot: Bot) -> str:
     """Baza fayli yo'q bo'lsa — kanaldan oxirgi zaxirani tortib oladi."""
-    if not BACKUP_CHAT:
+    chat_to = BACKUP_CHAT          # start paytida baza hali ochilmagan
+    if not chat_to:
         return "zaxira sozlanmagan"
     if _size(DB_PATH) > 0:
         return "mavjud baza ishlatiladi"
 
     try:
-        chat = await bot.get_chat(BACKUP_CHAT)
+        chat = await bot.get_chat(chat_to)
         pinned = getattr(chat, "pinned_message", None)
         doc = getattr(pinned, "document", None) if pinned else None
         if doc is None:
@@ -52,8 +62,9 @@ async def restore_if_needed(bot: Bot) -> str:
 
 async def save(bot: Bot, reason: str = "") -> str:
     """Bazani kanalga yuboradi va pin qiladi (eskisini pin'dan chiqaradi)."""
-    if not BACKUP_CHAT:
-        return "zaxira sozlanmagan"
+    chat_to = await chat_id()
+    if not chat_to:
+        return "zaxira kanali sozlanmagan (/zaxirakanal)"
     if _size(DB_PATH) == 0:
         return "baza bo'sh"
 
@@ -68,13 +79,13 @@ async def save(bot: Bot, reason: str = "") -> str:
     try:
         caption = f"💾 {db.now():%d.%m.%Y %H:%M}" + (f" · {reason}" if reason else "")
         msg = await bot.send_document(
-            BACKUP_CHAT,
+            chat_to,
             FSInputFile(DB_PATH, filename=f"bot_{db.now():%Y%m%d_%H%M}.db"),
             caption=caption,
             disable_notification=True,
         )
-        await bot.unpin_all_chat_messages(BACKUP_CHAT)
-        await bot.pin_chat_message(BACKUP_CHAT, msg.message_id, disable_notification=True)
+        await bot.unpin_all_chat_messages(chat_to)
+        await bot.pin_chat_message(chat_to, msg.message_id, disable_notification=True)
         log.info("Zaxira saqlandi (%s KB)", _size(DB_PATH) // 1024)
         return f"✅ zaxira saqlandi ({_size(DB_PATH) // 1024} KB)"
     except Exception as e:

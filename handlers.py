@@ -52,7 +52,7 @@ HELP = """<b>🏗 dunyabunya — narxlar boti</b>
 /logo — logo yuklash (keyingi rasmni logo qilib oladi)
 /rejim — post turi (pdf / rasm / mahsulot)\n/dizayn — brend kartochkani yoqish/o'chirish
 /shablon — post matni shabloni\n/aloqa — raqam bog'lanadigan havola
-/pauza · /davom — to'xtatish / davom ettirish\n/zaxira — bazani zaxira kanaliga saqlash
+/pauza · /davom — to'xtatish / davom ettirish\n/zaxirakanal — zaxira kanalini ulash\n/zaxira — bazani hoziroq saqlash
 /statistika · /eksport · /id
 """
 
@@ -112,13 +112,37 @@ async def cmd_channel(msg: Message, command: CommandObject):
 
 @router.message(F.forward_origin)
 async def forwarded(msg: Message):
-    """Kanaldan forward qilingan post — kanalni avtomatik ulaymiz."""
+    """Forward qilingan post — narxlar kanalini yoki zaxira kanalini ulaymiz."""
     if await deny(msg):
         return
     chat = getattr(msg.forward_origin, "chat", None)
     if chat is None:
         await msg.answer("Bu post kanaldan emas. Kanaldagi postni forward qiling.")
         return
+
+    draft = await db.next_draft(msg.from_user.id)
+    if draft and draft["need"] == "backup":
+        await db.drop_draft(draft["id"])
+        try:
+            probe = await msg.bot.send_message(chat.id, "💾 Zaxira kanali tekshirilmoqda…")
+            await msg.bot.pin_chat_message(chat.id, probe.message_id, disable_notification=True)
+            await msg.bot.unpin_all_chat_messages(chat.id)
+            await msg.bot.delete_message(chat.id, probe.message_id)
+        except Exception as e:
+            await msg.answer(
+                f"❌ Bu kanalda ishlay olmadim.\n<code>{e}</code>\n\n"
+                "Botni kanalga admin qiling — <b>post yuborish</b> va "
+                "<b>pin qilish</b> huquqi bilan."
+            )
+            return
+        await db.set("backup_chat", str(chat.id))
+        result = await backup.save(msg.bot, "sozlash")
+        await msg.answer(
+            f"✅ Zaxira kanali ulandi: <code>{chat.id}</code>\n{result}\n\n"
+            f"Render'ga ham yozib qo'ying: <code>BACKUP_CHAT={chat.id}</code>"
+        )
+        return
+
     await _set_channel(msg, str(chat.id), f"@{chat.username}" if chat.username else (chat.title or ""))
 
 
@@ -544,6 +568,23 @@ async def cmd_backup(msg: Message):
     if await deny(msg):
         return
     await msg.answer(await backup.save(msg.bot, "qo'lda"))
+
+
+@router.message(Command("zaxirakanal"))
+async def cmd_backup_channel(msg: Message):
+    """Zaxira kanalini ulash (keyingi forward qilingan post bo'yicha)."""
+    if await deny(msg):
+        return
+    cur = await backup.chat_id()
+    await db.add_draft(msg.from_user.id, need="backup")
+    await msg.answer(
+        f"💾 Hozirgi zaxira kanali: <code>{cur or 'yo‘q'}</code>\n\n"
+        "<b>Yangisini ulash:</b>\n"
+        "1️⃣ Telegramda <b>yopiq kanal</b> oching (odam qo'shmaysiz)\n"
+        "2️⃣ Botni unga <b>admin</b> qiling — post yuborish va pin qilish huquqi bilan\n"
+        "3️⃣ O'sha kanaldan istalgan xabarni shu yerga <b>forward</b> qiling\n\n"
+        "Bekor qilish: /tozala"
+    )
 
 
 @router.message(Command("eksport"))

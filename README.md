@@ -63,11 +63,18 @@ Telegram bot. Mahsulotlarni Excel fayl yoki rasm orqali beresiz — qolganini bo
    `https://<servis-nomi>.onrender.com/health` manzilini chaqiradigan monitor
    yarating. Bo'lmasa servis uxlab qoladi va 09:00 dagi post chiqmay ketadi.
 
-2. **Zaxira kanali.** Telegramda yopiq kanal ochasiz, botni admin qilasiz
-   (post yuborish + pin qilish huquqi bilan), kanal ID sini `BACKUP_CHAT` ga
-   yozasiz. Bot har Excel importdan keyin va har kuni kechqurun bazani o'sha
-   kanalga fayl qilib tashlaydi va **pin** qiladi; qayta ishga tushganda
-   pin qilingan fayldan bazani tiklaydi. Qo'lda saqlash: `/zaxira`.
+2. **Zaxira kanali.** Botning "seyfi" — bazani shu yerda saqlaydi:
+
+   - Telegramda **yopiq kanal** ochasiz (odam qo'shmaysiz, faqat siz va bot)
+   - Botni unga **admin** qilasiz: *post yuborish* + *pin qilish* huquqi bilan
+   - Botga `/zaxirakanal` deb yozasiz, so'ng o'sha kanaldan istalgan xabarni
+     botga **forward** qilasiz — bot ID ni oladi, tekshiradi va sizga
+     `BACKUP_CHAT=-100...` ni beradi. O'shani Render'ga ham yozib qo'ying
+     (bot qayta ishga tushganda baza yo'q bo'lsa, faqat env orqali topa oladi).
+
+   Bot har Excel importdan keyin va har kuni kechqurun bazani o'sha kanalga
+   fayl qilib tashlaydi va **pin** qiladi; qayta ishga tushganda pin qilingan
+   fayldan bazani tiklaydi. Qo'lda saqlash: `/zaxira`.
 
 > Zaxira kanali worker + disk variantida ham foydali — disk buzilsa qutqaradi.
 
@@ -166,7 +173,8 @@ mahsulot ochiladi. Tagiga hech narsa yozmasangiz, bot o'zi nomini so'raydi.
 /rejim pdf     post turi: pdf / rasm / mahsulot
 /aloqa         raqam bog'lanadigan havola
 /kanal · /masul · /dokon · /logo · /vaqt · /shablon · /dizayn
-/pauza · /davom · /zaxira · /eksport · /tozala · /id
+/zaxirakanal · /zaxira   zaxira kanali va qo'lda saqlash
+/pauza · /davom · /eksport · /tozala · /id
 ```
 
 ---
