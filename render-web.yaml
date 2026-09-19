@@ -1,0 +1,43 @@
+# WEB SERVICE varianti (bepul planda ham ishlaydi).
+#
+# Ishlatish: render.yaml o'rniga shu faylni `render.yaml` deb nomlang.
+#
+# ⚠️ Bepul planda:
+#   1) 15 daqiqa trafik bo'lmasa servis uxlaydi va jadval to'xtaydi.
+#      Yechim: tashqi "pinger" (uptimerobot.com yoki cron-job.org) har 10
+#      daqiqada https://<servis-nomi>.onrender.com/health manzilini chaqirsin.
+#   2) Doimiy disk yo'q — baza har deploy'da o'chadi.
+#      Yechim: BACKUP_CHAT — yopiq kanal ochasiz, botni unga admin qilasiz.
+#      Bot bazani o'sha kanalga fayl qilib tashlaydi va pin qiladi, qayta
+#      ishga tushganda pin qilingan fayldan tiklaydi.
+#
+# Tinchroq variant: render.yaml (worker + disk, $7/oy) — pinger ham,
+# zaxira kanali ham kerak emas.
+
+services:
+  - type: web
+    name: dunyabunya-narx-bot
+    runtime: python
+    plan: free                   # xohlasangiz: starter
+    region: frankfurt
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: BOT_TOKEN           # @BotFather bergan token
+        sync: false
+      - key: ADMIN_IDS           # sizning Telegram ID(lar)ingiz
+        sync: false
+      - key: CHANNEL_ID          # @Dunyabunya_prays
+        sync: false
+      - key: MANAGER_ID          # mas'ul xodim ID si
+        sync: false
+      - key: BACKUP_CHAT         # yopiq zaxira kanali ID si (-100...)
+        sync: false
+      - key: DB_PATH
+        value: ./data/bot.db     # bepul planda disk yo'q — zaxira kanali qutqaradi
+      - key: TZ
+        value: Asia/Tashkent
+      - key: PYTHON_VERSION
+        value: "3.12.6"

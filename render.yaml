@@ -1,0 +1,30 @@
+# Render.com uchun tayyor konfiguratsiya.
+# Repo'ni GitHub'ga yuklang -> Render'da "New +" -> "Blueprint" -> shu repo'ni tanlang.
+services:
+  - type: worker                 # background worker (24/7 ishlaydi, port kerak emas)
+    name: dunyabunya-narx-bot
+    runtime: python
+    plan: starter                # disk ulash uchun starter kerak (free'da disk yo'q)
+    region: frankfurt            # O'zbekistonga eng yaqin region
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    autoDeploy: true
+    disk:
+      name: bot-data             # baza va logo shu yerda saqlanadi
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: BOT_TOKEN           # @BotFather bergan token
+        sync: false
+      - key: ADMIN_IDS           # sizning Telegram ID(lar)ingiz, vergul bilan
+        sync: false
+      - key: CHANNEL_ID          # @kanal_nomi yoki -100... (keyin /kanal bilan ham bo'ladi)
+        sync: false
+      - key: MANAGER_ID          # mas'ul xodimning Telegram ID si
+        sync: false
+      - key: DB_PATH
+        value: /data/bot.db
+      - key: TZ
+        value: Asia/Tashkent
+      - key: PYTHON_VERSION
+        value: "3.12.6"

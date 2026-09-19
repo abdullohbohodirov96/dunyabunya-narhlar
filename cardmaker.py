@@ -1,0 +1,432 @@
+"""dunyabunya brend dizaynidagi narx-kartochkasini yasaydi (Pillow).
+
+Ranglar: to'q ko'k (dark navy) + "mokriy asfalt" (to'q kulrang) fon, to'q sariq aksent.
+Chiqish: 1080x1350 PNG (Telegram kanal + Instagram uchun mos).
+"""
+import io
+import os
+import re
+import textwrap
+
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
+
+BASE = os.path.dirname(os.path.abspath(__file__))
+FONT_DIR = os.path.join(BASE, "assets", "fonts")
+def logo_path() -> str:
+    """Logo fayli: LOGO_PATH env -> baza papkasi -> repo assets."""
+    env = os.getenv("LOGO_PATH", "").strip()
+    if env:
+        return env
+    data_dir = os.path.dirname(os.getenv("DB_PATH", "/data/bot.db")) or "."
+    candidate = os.path.join(data_dir, "logo.png")
+    if os.path.exists(candidate):
+        return candidate
+    return os.path.join(BASE, "assets", "logo.png")
+
+W, H = 1080, 1350
+PAD = 64
+
+# ---- dunyabunya BREND RANGLARI -----------------------------------------
+# #e97609 (to'q sariq) · #2e3239 (mokriy asfalt) · #000000 · #ffffff
+ORANGE = (233, 118, 9)
+ORANGE_DARK = (196, 96, 5)
+ASPHALT = (46, 50, 57)
+ASPHALT_LIGHT = (62, 68, 77)
+BLACK = (0, 0, 0)
+NAVY = (26, 29, 34)          # qora bilan asfalt orasidagi oraliq
+NAVY_DEEP = (10, 11, 13)
+WHITE = (255, 255, 255)
+MUTED = (163, 170, 180)
+
+CYRILLIC = re.compile(r"[Ѐ-ӿ]")
+_font_cache: dict = {}
+
+
+# Brend shrifti — Montserrat. assets/fonts ichiga Montserrat-Bold.ttf va
+# Montserrat-Medium.ttf tashlansa, bot avtomatik o'shani ishlatadi.
+# Bo'lmasa — Poppins (juda yaqin geometrik sans), kirill uchun DejaVu.
+FONT_STACK = {
+    (True, False): ["Montserrat-Bold.ttf", "Poppins-Bold.ttf", "DejaVuSans-Bold.ttf"],
+    (False, False): ["Montserrat-Medium.ttf", "Montserrat-Regular.ttf",
+                     "Poppins-Medium.ttf", "DejaVuSans.ttf"],
+    (True, True): ["Montserrat-Bold.ttf", "DejaVuSans-Bold.ttf"],
+    (False, True): ["Montserrat-Medium.ttf", "DejaVuSans.ttf"],
+}
+
+
+def _font_file(bold: bool, cyr: bool) -> str:
+    for name in FONT_STACK[(bold, cyr)]:
+        path = os.path.join(FONT_DIR, name)
+        if os.path.exists(path):
+            return path
+    return os.path.join(FONT_DIR, "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf")
+
+
+def font(size: int, bold: bool = False, text: str = "") -> ImageFont.FreeTypeFont:
+    key = (size, bold, bool(CYRILLIC.search(text or "")))
+    if key not in _font_cache:
+        try:
+            _font_cache[key] = ImageFont.truetype(_font_file(bold, key[2]), size)
+        except OSError:
+            _font_cache[key] = ImageFont.load_default()
+    return _font_cache[key]
+
+
+def _w(draw, text, f) -> int:
+    return draw.textbbox((0, 0), text, font=f)[2]
+
+
+def _h(draw, text, f) -> int:
+    b = draw.textbbox((0, 0), text or "Ag", font=f)
+    return b[3] - b[1]
+
+
+# ---------------------------------------------------------------- fon
+def _background() -> Image.Image:
+    small = Image.new("RGB", (2, 2))
+    small.putpixel((0, 0), ASPHALT_LIGHT)
+    small.putpixel((1, 0), ASPHALT)
+    small.putpixel((0, 1), NAVY)
+    small.putpixel((1, 1), NAVY_DEEP)
+    bg = small.resize((W, H), Image.Resampling.BICUBIC)
+
+    # yengil diagonal chiziqlar (qurilish teksturasi)
+    stripes = Image.new("L", (W, H), 0)
+    sd = ImageDraw.Draw(stripes)
+    for x in range(-H, W, 46):
+        sd.line([(x, H), (x + H, 0)], fill=16, width=12)
+    bg = Image.composite(Image.new("RGB", (W, H), WHITE), bg, stripes.filter(ImageFilter.GaussianBlur(1)))
+
+    # pastki chap burchakda yengil to'q sariq nur
+    glow = Image.new("RGB", (W, H), ORANGE)
+    mask = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(mask).ellipse([-460, H - 380, 420, H + 380], fill=46)
+    bg = Image.composite(glow, bg, mask.filter(ImageFilter.GaussianBlur(140)))
+    return bg
+
+
+def _cover(img: Image.Image, box_w: int, box_h: int) -> Image.Image:
+    img = img.convert("RGB")
+    ratio = max(box_w / img.width, box_h / img.height)
+    img = img.resize((max(1, int(img.width * ratio)), max(1, int(img.height * ratio))), Image.Resampling.LANCZOS)
+    left = (img.width - box_w) // 2
+    top = (img.height - box_h) // 2
+    return img.crop((left, top, left + box_w, top + box_h))
+
+
+def _round_mask(size, radius: int) -> Image.Image:
+    m = Image.new("L", size, 0)
+    ImageDraw.Draw(m).rounded_rectangle([0, 0, size[0] - 1, size[1] - 1], radius=radius, fill=255)
+    return m
+
+
+def _fit_lines(draw, text: str, max_w: int, size: int, bold: bool, max_lines: int):
+    """Matnni qatorlarga bo'ladi, sig'masa shriftni kichraytiradi."""
+    while size > 28:
+        f = font(size, bold, text)
+        avg = max(1, _w(draw, "ABCDEFGHIJ", f) // 10)
+        lines = textwrap.wrap(text, width=max(6, int(max_w / avg * 1.05))) or [text]
+        if len(lines) <= max_lines and all(_w(draw, ln, f) <= max_w for ln in lines):
+            return lines, f
+        size -= 4
+    f = font(size, bold, text)
+    lines = textwrap.wrap(text, width=24)[:max_lines] or [text]
+    return lines, f
+
+
+def _money(v) -> str:
+    s = str(v or "").strip().replace(" ", "").replace(",", "")
+    if re.fullmatch(r"\d+(\.\d+)?", s):
+        return f"{int(float(s)):,}".replace(",", " ")
+    return str(v or "").strip()
+
+
+# ---------------------------------------------------------------- logo
+def _draw_logo(img: Image.Image, draw: ImageDraw.ImageDraw, shop_name: str) -> int:
+    """Yuqori chap burchakka logo yoki wordmark. Pastki y ni qaytaradi."""
+    y = PAD
+    lp = logo_path()
+    if os.path.exists(lp):
+        try:
+            logo = Image.open(lp).convert("RGBA")
+            target_h = 96
+            ratio = target_h / logo.height
+            logo = logo.resize((int(logo.width * ratio), target_h), Image.Resampling.LANCZOS)
+            img.paste(logo, (PAD, y), logo)
+            return y + target_h
+        except Exception:
+            pass
+
+    draw.rounded_rectangle([PAD, y, PAD + 84, y + 84], radius=20, fill=ORANGE)
+    f_mark = font(44, True, "db")
+    draw.text((PAD + 42, y + 44), "db", font=f_mark, fill=WHITE, anchor="mm")
+
+    f_name = font(38, True, shop_name)
+    draw.text((PAD + 106, y + 16), shop_name, font=f_name, fill=WHITE)
+    f_sub = font(21, False, "QURILISH MOLLARI")
+    draw.text((PAD + 108, y + 56), "QURILISH MOLLARI", font=f_sub, fill=MUTED)
+    return y + 84
+
+
+# ---------------------------------------------------------------- asosiy
+def make_card(product: dict, settings: dict, photo_bytes: bytes | None = None) -> bytes:
+    name = (product.get("name") or "").strip()
+    price = _money(product.get("price"))
+    old_price = _money(product.get("old_price"))
+    unit = (product.get("unit") or "").strip()
+    brand = (product.get("brand") or "").strip()
+    category = (product.get("category") or "").strip()
+    note = (product.get("note") or "").strip()
+    shop = (settings.get("shop_name") or "dunyabunya").strip()
+    phone = (settings.get("shop_phone") or "").strip()
+    channel = (settings.get("channel_link") or "").strip()
+
+    img = _background()
+    draw = ImageDraw.Draw(img)
+
+    # --- sarlavha qatori
+    logo_bottom = _draw_logo(img, draw, shop)
+    badge = "NARXLAR"
+    f_badge = font(24, True, badge)
+    bw = _w(draw, badge, f_badge) + 44
+    draw.rounded_rectangle([W - PAD - bw, PAD + 18, W - PAD, PAD + 18 + 54], radius=27,
+                           outline=ORANGE, width=3)
+    draw.text((W - PAD - bw / 2, PAD + 18 + 27), badge, font=f_badge, fill=ORANGE, anchor="mm")
+
+    # --- mahsulot rasmi
+    top = logo_bottom + 48
+    ph_h = 540
+    if photo_bytes:
+        try:
+            src = Image.open(io.BytesIO(photo_bytes))
+            photo = _cover(src, W - 2 * PAD, ph_h)
+            mask = _round_mask(photo.size, 36)
+            shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+            ImageDraw.Draw(shadow).rounded_rectangle(
+                [PAD + 8, top + 16, W - PAD + 8, top + ph_h + 22], radius=36, fill=(0, 0, 0, 150)
+            )
+            img.paste(Image.alpha_composite(img.convert("RGBA"), shadow.filter(
+                ImageFilter.GaussianBlur(18))).convert("RGB"), (0, 0))
+            draw = ImageDraw.Draw(img)
+            img.paste(photo, (PAD, top), mask)
+            draw.rounded_rectangle([PAD, top, W - PAD - 1, top + ph_h - 1], radius=36,
+                                   outline=(255, 255, 255, 40), width=2)
+        except Exception:
+            photo_bytes = None
+
+    if not photo_bytes:
+        ph_h = 430
+        draw.rounded_rectangle([PAD, top, W - PAD, top + ph_h], radius=36, fill=ASPHALT_LIGHT)
+        f_ph = font(30, True, shop)
+        draw.text((W / 2, top + ph_h / 2), shop, font=f_ph, fill=MUTED, anchor="mm")
+
+    y = top + ph_h + 46
+
+    # --- kategoriya / brend chiplari
+    chips = [c for c in (category, brand) if c]
+    if chips:
+        x = PAD
+        for i, chip in enumerate(chips[:2]):
+            f_c = font(24, True, chip)
+            cw = _w(draw, chip.upper(), f_c) + 40
+            if x + cw > W - PAD:
+                break
+            fill = ORANGE if i == 0 else None
+            draw.rounded_rectangle([x, y, x + cw, y + 50], radius=25,
+                                   fill=fill, outline=None if fill else MUTED, width=2)
+            draw.text((x + cw / 2, y + 25), chip.upper(), font=f_c,
+                      fill=WHITE if fill else MUTED, anchor="mm")
+            x += cw + 14
+        y += 74
+
+    # --- mahsulot nomi
+    lines, f_name = _fit_lines(draw, name, W - 2 * PAD, 62, True, 3)
+    for ln in lines:
+        draw.text((PAD, y), ln, font=f_name, fill=WHITE)
+        y += int(f_name.size * 1.22)
+    y += 16
+
+    # --- narx paneli
+    panel_h = 172
+    panel_y = H - PAD - 96 - panel_h - 24
+    panel_y = max(y + 10, panel_y)
+    draw.rounded_rectangle([PAD, panel_y, W - PAD, panel_y + panel_h], radius=32, fill=ORANGE)
+    draw.rounded_rectangle([PAD, panel_y, PAD + 10, panel_y + panel_h], radius=6, fill=ORANGE_DARK)
+
+    f_lbl = font(24, False, "NARXI")
+    draw.text((PAD + 40, panel_y + 26), "NARXI", font=f_lbl, fill=(255, 235, 215))
+
+    price_txt = price or "—"
+    size = 84
+    while size > 44 and _w(draw, price_txt, font(size, True, price_txt)) > W - 2 * PAD - 300:
+        size -= 4
+    f_price = font(size, True, price_txt)
+    px, py = PAD + 40, panel_y + 62
+    draw.text((px, py), price_txt, font=f_price, fill=WHITE)
+    px += _w(draw, price_txt, f_price) + 12
+
+    f_cur = font(34, True, "so'm")
+    draw.text((px, py + size - 44), "so'm", font=f_cur, fill=(255, 240, 225))
+    px += _w(draw, "so'm", f_cur) + 8
+    if unit:
+        f_u = font(28, False, unit)
+        draw.text((px, py + size - 40), f"/ {unit}", font=f_u, fill=(255, 228, 205))
+
+    if old_price:
+        old_txt = f"{old_price} so'm"
+        f_old = font(30, False, old_txt)
+        ow = _w(draw, old_txt, f_old)
+        ox = W - PAD - 40 - ow
+        oy = panel_y + 38
+        draw.text((ox, oy), old_txt, font=f_old, fill=(255, 226, 202))
+        mid = oy + f_old.size * 0.72
+        draw.line([(ox - 6, mid), (ox + ow + 6, mid)], fill=(255, 226, 202), width=3)
+
+    if note:
+        f_n = font(26, False, note)
+        nt = note if _w(draw, note, f_n) <= W - 2 * PAD else note[:60] + "…"
+        draw.text((PAD + 4, panel_y - 44), nt, font=f_n, fill=MUTED)
+
+    # --- pastki qator
+    fy = H - PAD - 62
+    draw.line([(PAD, fy - 26), (W - PAD, fy - 26)], fill=(90, 100, 112), width=2)
+    if phone:
+        # kichik telefon belgisi (emoji o'rniga — har qanday tizimda chiziladi)
+        draw.rounded_rectangle([PAD, fy + 2, PAD + 28, fy + 40], radius=8, fill=ORANGE)
+        draw.rounded_rectangle([PAD + 8, fy + 10, PAD + 20, fy + 30], radius=4, fill=NAVY_DEEP)
+        f_f = font(28, True, phone)
+        draw.text((PAD + 44, fy + 4), phone, font=f_f, fill=WHITE)
+    if channel:
+        f_ch = font(26, False, channel)
+        draw.text((W - PAD, fy + 8), channel, font=f_ch, fill=ORANGE, anchor="ra")
+
+    out = io.BytesIO()
+    img.save(out, format="JPEG", quality=92, optimize=True)
+    return out.getvalue()
+
+
+# ================================================================
+#  KATEGORIYA PRAYS KARTOCHKASI  (asosiy post turi)
+#  Bir rasmda bitta kategoriya narxlari jadval ko'rinishida
+# ================================================================
+MAX_ROWS = 16          # bitta rasmga sig'adigan qator soni
+ROW_H = 78
+
+
+def _background_h(height: int) -> Image.Image:
+    """Istalgan balandlikdagi brend foni."""
+    global H
+    old = H
+    H = height
+    try:
+        return _background()
+    finally:
+        H = old
+
+
+def make_list_card(category: str, items: list[dict], settings: dict,
+                   page: int = 1, pages: int = 1) -> bytes:
+    """Bitta kategoriya narxlari — jadval ko'rinishidagi brend kartochka."""
+    shop = (settings.get("shop_name") or "dunyabunya").strip()
+    phone = (settings.get("shop_phone") or "").strip()
+    channel = (settings.get("channel_link") or "").strip()
+    sana = settings.get("sana", "")
+
+    items = items[:MAX_ROWS]
+    head_h = 250
+    title_h = 150
+    foot_h = 150
+    height = max(940, head_h + title_h + len(items) * ROW_H + foot_h)
+
+    img = _background_h(height)
+    draw = ImageDraw.Draw(img)
+
+    # --- logo + badge
+    logo_bottom = _draw_logo(img, draw, shop)
+    badge = "NARXLAR" if pages == 1 else f"{page}/{pages}"
+    f_badge = font(24, True, badge)
+    bw = _w(draw, badge, f_badge) + 44
+    draw.rounded_rectangle([W - PAD - bw, PAD + 18, W - PAD, PAD + 18 + 54],
+                           radius=27, outline=ORANGE, width=3)
+    draw.text((W - PAD - bw / 2, PAD + 18 + 27), badge, font=f_badge, fill=ORANGE, anchor="mm")
+
+    # --- kategoriya sarlavhasi
+    y = logo_bottom + 52
+    cat = category.upper()
+    lines, f_cat = _fit_lines(draw, cat, W - 2 * PAD, 72, True, 2)
+    for ln in lines:
+        draw.text((PAD, y), ln, font=f_cat, fill=WHITE)
+        y += int(f_cat.size * 1.18)
+    draw.rounded_rectangle([PAD, y + 10, PAD + 120, y + 18], radius=4, fill=ORANGE)
+    y += 34
+
+    if sana:
+        f_d = font(24, False, sana)
+        draw.text((W - PAD, y - 46), f"{sana} holatiga", font=f_d, fill=MUTED, anchor="ra")
+
+    y += 22
+
+    # --- jadval
+    for i, p in enumerate(items):
+        top = y
+        if i % 2 == 0:
+            draw.rounded_rectangle([PAD - 14, top, W - PAD + 14, top + ROW_H - 8],
+                                   radius=16, fill=ASPHALT_LIGHT)
+
+        price = _money(p.get("price")) or "—"
+        unit = (p.get("unit") or "").strip()
+        f_price = font(36, True, price)
+        f_unit = font(23, False, unit)
+
+        price_w = _w(draw, price, f_price)
+        unit_txt = f" / {unit}" if unit else ""
+        unit_w = _w(draw, unit_txt, f_unit) if unit_txt else 0
+        f_cur = font(24, True, "so'm")
+        cur_w = _w(draw, "so'm", f_cur) + 8
+
+        right = W - PAD
+        px = right - price_w - cur_w - unit_w - 10
+        base = top + (ROW_H - 8) / 2
+
+        # nom (+ brend)
+        name = (p.get("name") or "").strip()
+        brand = (p.get("brand") or "").strip()
+        max_name_w = px - PAD - 40
+        f_n = font(31, True, name)
+        nm = name
+        if _w(draw, nm, f_n) > max_name_w:
+            while nm and _w(draw, nm.rstrip() + "…", f_n) > max_name_w:
+                nm = nm[:-1]
+            nm = nm.rstrip() + "…"
+        draw.text((PAD + 4, base - (14 if brand else 0)), nm, font=f_n, fill=WHITE, anchor="lm")
+        if brand:
+            f_b = font(22, False, brand)
+            draw.text((PAD + 4, base + 18), brand, font=f_b, fill=MUTED, anchor="lm")
+
+        # narx
+        draw.text((px, base), price, font=f_price, fill=ORANGE, anchor="lm")
+        draw.text((px + price_w + 8, base + 6), "so'm", font=f_cur, fill=ORANGE, anchor="lm")
+        if unit_txt:
+            draw.text((px + price_w + cur_w + 6, base + 7), unit_txt, font=f_unit,
+                      fill=MUTED, anchor="lm")
+
+        else:
+            draw.line([(PAD - 14, top + ROW_H - 8), (W - PAD + 14, top + ROW_H - 8)],
+                      fill=(78, 86, 97), width=1)
+        y += ROW_H
+
+    # --- pastki qator
+    fy = height - PAD - 62
+    draw.line([(PAD, fy - 26), (W - PAD, fy - 26)], fill=(90, 100, 112), width=2)
+    if phone:
+        draw.rounded_rectangle([PAD, fy + 2, PAD + 28, fy + 40], radius=8, fill=ORANGE)
+        draw.rounded_rectangle([PAD + 8, fy + 10, PAD + 20, fy + 30], radius=4, fill=NAVY_DEEP)
+        f_f = font(28, True, phone)
+        draw.text((PAD + 44, fy + 4), phone, font=f_f, fill=WHITE)
+    if channel:
+        f_ch = font(26, False, channel)
+        draw.text((W - PAD, fy + 8), channel, font=f_ch, fill=ORANGE, anchor="ra")
+
+    out = io.BytesIO()
+    img.save(out, format="JPEG", quality=92, optimize=True)
+    return out.getvalue()
