@@ -78,6 +78,12 @@ Telegram bot. Mahsulotlarni Excel fayl yoki rasm orqali beresiz — qolganini bo
 
 > Zaxira kanali worker + disk variantida ham foydali — disk buzilsa qutqaradi.
 
+> **Python versiyasi.** Repo ichida `.python-version` fayli bor (`3.12`) —
+> Render shuni o'qiydi. Render'ning standart versiyasi 3.14, unda Pillow/reportlab
+> kabi kutubxonalar tayyor paket topa olmay qurilishga urinadi va build yiqiladi.
+> Agar servisni qo'lda yaratgan bo'lsangiz va baribir xato bersa, Environment'ga
+> `PYTHON_VERSION=3.12.6` deb qo'shing — u hamma narsadan ustun turadi.
+
 Lokal kompyuterda sinash uchun: `.env.example` ni `.env` qilib to'ldiring, so'ng
 `pip install -r requirements.txt && python bot.py`.
 

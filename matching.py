@@ -2,14 +2,7 @@
 import re
 import unicodedata
 
-try:
-    from rapidfuzz import fuzz, process as rf_process
-
-    HAVE_RF = True
-except ImportError:  # zaxira variant
-    import difflib
-
-    HAVE_RF = False
+from difflib import SequenceMatcher
 
 CYR2LAT = {
     "а": "a", "б": "b", "в": "v", "г": "g", "ғ": "g", "д": "d", "е": "e", "ё": "yo",
@@ -56,6 +49,31 @@ def normalize(text: str) -> str:
     return " ".join(words).strip()
 
 
+def _token_cover(q_tokens: list[str], c_tokens: list[str]) -> float:
+    """So'rovdagi har bir so'z nomzodda qanchalik topilgani (0..1)."""
+    if not q_tokens or not c_tokens:
+        return 0.0
+    total = 0.0
+    for t in q_tokens:
+        total += max(SequenceMatcher(None, t, c).ratio() for c in c_tokens)
+    return total / len(q_tokens)
+
+
+def score(query: str, candidate: str) -> float:
+    """0..100. Ikki nomning o'xshashligi (so'z darajasida + butun matn)."""
+    q, c = normalize(query), normalize(candidate)
+    if not q or not c:
+        return 0.0
+    if q == c:
+        return 100.0
+    qt, ct = q.split(), c.split()
+    cover = _token_cover(qt, ct)
+    whole = SequenceMatcher(None, q, c).ratio()
+    # ikki tomonlama qamrov — bittasi ikkinchisining bo'lagi bo'lsa ham ishlaydi
+    back = _token_cover(ct, qt)
+    return max(cover, whole, (cover + back) / 2) * 100
+
+
 def best_match(query: str, choices: dict[str, object], threshold: int = 82):
     """choices: {norm_name: obyekt}. Eng mos kelganini qaytaradi yoki None."""
     q = normalize(query)
@@ -64,14 +82,9 @@ def best_match(query: str, choices: dict[str, object], threshold: int = 82):
     if q in choices:
         return choices[q]
 
-    keys = list(choices)
-    if HAVE_RF:
-        hit = rf_process.extractOne(q, keys, scorer=fuzz.token_set_ratio, score_cutoff=threshold)
-        if hit:
-            return choices[hit[0]]
-        # qisman: so'rov nomning bir qismi bo'lsa
-        hit = rf_process.extractOne(q, keys, scorer=fuzz.partial_ratio, score_cutoff=92)
-        return choices[hit[0]] if hit else None
-
-    close = difflib.get_close_matches(q, keys, n=1, cutoff=threshold / 100)
-    return choices[close[0]] if close else None
+    best_key, best = None, 0.0
+    for key in choices:
+        sc = score(q, key)
+        if sc > best:
+            best_key, best = key, sc
+    return choices[best_key] if best_key is not None and best >= threshold else None

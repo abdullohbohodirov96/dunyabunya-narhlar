@@ -40,4 +40,4 @@ services:
       - key: TZ
         value: Asia/Tashkent
       - key: PYTHON_VERSION
-        value: "3.12.6"
+        value: "3.12.6"   # 3.13+ da ba'zi kutubxonalar yig'ilmaydi
