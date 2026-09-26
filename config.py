@@ -59,6 +59,8 @@ DEFAULTS = {
     "group_by": "brend",
     # narxlar shuncha kundan beri yangilanmasa — mas'ulga eslatma
     "stale_days": "7",
+    # rasm foni: toq (mokriy asfalt) / qora / tekis / oq
+    "card_theme": "toq",
     # 1 = brend dizaynidagi kartochka yasalsin, 0 = oddiy rasm yuborilsin
     "card_design": "1",
     "channel_id": CHANNEL_ID,
@@ -68,8 +70,8 @@ DEFAULTS = {
     "channel_link": "@Dunyabunya_prays",
     # Filiallar: "Nomi|telefon" juftliklari, nuqtali vergul bilan ajratiladi
     "branches": (
-        "Shirinobod|+998(91)785-00-90;"
-        "Hasanboy|+998(91)785-00-90;"
+        "Shiribom|+998(77)756-39-99;"
+        "Hasanboy|+998(97)714-08-44;"
         "Qorasaroy|+998(91)785-00-90"
     ),
     # telefon raqami shu havolaga bog'lanadi (bo'sh qoldirilsa — oddiy matn)

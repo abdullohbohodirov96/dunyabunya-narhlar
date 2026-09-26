@@ -51,7 +51,7 @@ HELP = """<b>🏗 dunyabunya — narxlar boti</b>
 /vaqt 09:00,11:30,14:00,16:30,19:00 — post vaqtlari
 /dokon dunyabunya | +998(91)785-00-90 | @kanal
 /logo — logo yuklash (keyingi rasmni logo qilib oladi)
-/rejim — post turi (pdf / rasm / mahsulot)\n/guruh — brend yoki kategoriya bo'yicha\n/dizayn — brend kartochkani yoqish/o'chirish
+/fon — post rasmining orqa foni\n/rejim — post turi (rasm / pdf / mahsulot)\n/guruh — brend yoki kategoriya bo'yicha\n/dizayn — brend kartochkani yoqish/o'chirish
 /shablon — post matni shabloni\n/filial — filiallar va raqamlari\n/aloqa — raqam bog'lanadigan havola
 /pauza · /davom — to'xtatish / davom ettirish\n/zaxirakanal — zaxira kanalini ulash\n/zaxira — bazani hoziroq saqlash
 /statistika · /eksport · /id
@@ -336,6 +336,42 @@ async def cmd_group(msg: Message, command: CommandObject):
         + "\n".join(f"• {g}" for g in groups[:12])
         + ("\n…" if len(groups) > 12 else "")
         + "\n\nKo'rish: <code>/korish</code>"
+    )
+
+
+@router.message(Command("fon"))
+async def cmd_theme(msg: Message, command: CommandObject):
+    """Post rasmining orqa foni."""
+    if await deny(msg):
+        return
+    names = {
+        "toq": "🌑 To'q — mokriy asfalt, diagonal chiziqlar bilan",
+        "qora": "⚫️ Qora — sof qora, minimal",
+        "tekis": "▪️ Tekis — bitta rang, teksturasiz (eng toza)",
+        "oq": "⬜️ Oq — yorug' fon, tepasida to'q chiziq",
+    }
+    arg = (command.args or "").strip().lower()
+    if arg not in names:
+        cur = await db.get("card_theme", "toq")
+        await msg.answer(
+            f"🎨 Hozirgi fon: <b>{names.get(cur, cur)}</b>\n\n"
+            + "\n".join(f"<code>/fon {k}</code> — {v}" for k, v in names.items())
+            + "\n\nTanlagandan keyin <code>/korish</code> bilan ko'ring."
+        )
+        return
+    await db.set("card_theme", arg)
+
+    # tanlangan fonni darrov ko'rsatamiz
+    picked = await db.pick_next_category()
+    if picked is None:
+        await msg.answer(f"✅ Fon: <b>{names[arg]}</b>")
+        return
+    category, items = picked
+    settings = await db.all_settings()
+    cards = await poster.build_category_cards(category, items, settings)
+    await msg.answer_photo(
+        BufferedInputFile(cards[0], filename="fon.png"),
+        caption=f"✅ Fon: <b>{names[arg]}</b>\n<i>Namuna — kanalga joylanmadi</i>",
     )
 
 

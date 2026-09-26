@@ -307,28 +307,78 @@ def make_card(product: dict, settings: dict, photo_bytes: bytes | None = None) -
 
 # ================================================================
 #  BREND PRAYS KARTOCHKASI  (asosiy post turi)
-#  Bitta rasmda bitta brendning hamma mahsuloti, kategoriyalarga bo'lingan:
-#
-#     KNAUF                      <- sarlavha
-#       GIPSOKARTON              <- bo'lim
-#         Knauf GKL 12.5mm  68 000 so'm / list
-#       ROTBAND
-#         Knauf Rotband 30kg  46 000 so'm / qop
+#  Bitta rasmda bitta brendning hamma mahsuloti, kategoriyalarga bo'lingan.
+#  Fon mavzusi /fon buyrug'i bilan tanlanadi.
 # ================================================================
-MAX_ROWS = 18          # bitta rasmga sig'adigan mahsulot soni
+MAX_ROWS = 18
 ROW_H = 76
 SECTION_H = 62
+BAND_H = 236          # yuqoridagi to'q chiziq (logo oq bo'lgani uchun kerak)
+
+THEMES = {
+    # to'q: mokriy asfalt + qora, diagonal chiziqlar bilan
+    "toq": {
+        "bg": ASPHALT_LIGHT, "bg2": ASPHALT, "bg3": NAVY, "bg4": NAVY_DEEP,
+        "stripe": (255, 255, 255), "stripe_a": 16, "glow": 46,
+        "text": WHITE, "muted": MUTED, "row": ASPHALT_LIGHT,
+        "line": (78, 86, 97), "band": None, "foot_line": (90, 100, 112),
+    },
+    # qora: sof qora, minimal
+    "qora": {
+        "bg": (24, 24, 26), "bg2": (12, 12, 14), "bg3": (8, 8, 9), "bg4": BLACK,
+        "stripe": (255, 255, 255), "stripe_a": 10, "glow": 34,
+        "text": WHITE, "muted": (150, 152, 158), "row": (38, 38, 42),
+        "line": (62, 62, 68), "band": None, "foot_line": (70, 70, 76),
+    },
+    # tekis: bitta rang, hech qanday tekstura yo'q — eng toza
+    "tekis": {
+        "bg": ASPHALT, "bg2": ASPHALT, "bg3": ASPHALT, "bg4": ASPHALT,
+        "stripe": None, "stripe_a": 0, "glow": 0,
+        "text": WHITE, "muted": (160, 168, 178), "row": (58, 63, 71),
+        "line": (74, 80, 89), "band": None, "foot_line": (88, 95, 104),
+    },
+    # oq: yorug' fon, tepasida to'q chiziq (logo oq bo'lgani uchun)
+    "oq": {
+        "bg": (248, 249, 250), "bg2": (241, 243, 245), "bg3": (238, 240, 242),
+        "bg4": (232, 235, 238),
+        "stripe": (255, 255, 255), "stripe_a": 80, "glow": 0,
+        "text": (17, 19, 22), "muted": (112, 120, 130), "row": (255, 255, 255),
+        "line": (223, 226, 230), "band": ASPHALT, "foot_line": (214, 218, 223),
+    },
+}
 
 
-def _background_h(height: int) -> Image.Image:
-    """Istalgan balandlikdagi brend foni."""
-    global H
-    old = H
-    H = height
-    try:
-        return _background()
-    finally:
-        H = old
+def theme_of(settings: dict) -> dict:
+    return THEMES.get((settings.get("card_theme") or "toq").strip().lower(), THEMES["toq"])
+
+
+def _background_theme(height: int, t: dict) -> Image.Image:
+    small = Image.new("RGB", (2, 2))
+    small.putpixel((0, 0), t["bg"])
+    small.putpixel((1, 0), t["bg2"])
+    small.putpixel((0, 1), t["bg3"])
+    small.putpixel((1, 1), t["bg4"])
+    bg = small.resize((W, height), Image.Resampling.BICUBIC)
+
+    if t["stripe"] and t["stripe_a"]:
+        stripes = Image.new("L", (W, height), 0)
+        sd = ImageDraw.Draw(stripes)
+        for x in range(-height, W, 46):
+            sd.line([(x, height), (x + height, 0)], fill=t["stripe_a"], width=12)
+        bg = Image.composite(Image.new("RGB", (W, height), t["stripe"]),
+                             bg, stripes.filter(ImageFilter.GaussianBlur(1)))
+
+    if t["glow"]:
+        glow = Image.new("RGB", (W, height), ORANGE)
+        mask = Image.new("L", (W, height), 0)
+        ImageDraw.Draw(mask).ellipse([-460, height - 380, 420, height + 380], fill=t["glow"])
+        bg = Image.composite(glow, bg, mask.filter(ImageFilter.GaussianBlur(140)))
+
+    if t["band"]:
+        d = ImageDraw.Draw(bg)
+        d.rectangle([0, 0, W, BAND_H], fill=t["band"])
+        d.rectangle([0, BAND_H - 8, W, BAND_H], fill=ORANGE)
+    return bg
 
 
 def group_sections(items: list[dict]) -> list[tuple[str, list[dict]]]:
@@ -345,9 +395,8 @@ def group_sections(items: list[dict]) -> list[tuple[str, list[dict]]]:
 
 
 def split_pages(items: list[dict], per_page: int = MAX_ROWS) -> list[list[dict]]:
-    """Mahsulotlarni sahifalarga bo'ladi, bo'limni imkon qadar buzmasdan."""
     pages, cur = [], []
-    for cat, rows in group_sections(items):
+    for _cat, rows in group_sections(items):
         for r in rows:
             if len(cur) >= per_page:
                 pages.append(cur)
@@ -358,10 +407,10 @@ def split_pages(items: list[dict], per_page: int = MAX_ROWS) -> list[list[dict]]
     return pages or [[]]
 
 
-def _draw_row(draw, item: dict, top: int, zebra: bool) -> None:
+def _draw_row(draw, item: dict, top: int, zebra: bool, t: dict) -> None:
     if zebra:
         draw.rounded_rectangle([PAD - 14, top, W - PAD + 14, top + ROW_H - 8],
-                               radius=16, fill=ASPHALT_LIGHT)
+                               radius=16, fill=t["row"])
 
     price = _money(item.get("price")) or "—"
     unit = (item.get("unit") or "").strip()
@@ -384,22 +433,23 @@ def _draw_row(draw, item: dict, top: int, zebra: bool) -> None:
         while name and _w(draw, name.rstrip() + "…", f_n) > max_w:
             name = name[:-1]
         name = name.rstrip() + "…"
-    draw.text((PAD + 4, base), name, font=f_n, fill=WHITE, anchor="lm")
+    draw.text((PAD + 4, base), name, font=f_n, fill=t["text"], anchor="lm")
 
     draw.text((px, base), price, font=f_price, fill=ORANGE, anchor="lm")
     draw.text((px + price_w + 8, base + 5), "so'm", font=f_cur, fill=ORANGE, anchor="lm")
     if unit_txt:
         draw.text((px + price_w + cur_w + 6, base + 6), unit_txt, font=f_unit,
-                  fill=MUTED, anchor="lm")
+                  fill=t["muted"], anchor="lm")
 
     if not zebra:
         draw.line([(PAD - 14, top + ROW_H - 8), (W - PAD + 14, top + ROW_H - 8)],
-                  fill=(78, 86, 97), width=1)
+                  fill=t["line"], width=1)
 
 
 def make_list_card(title: str, items: list[dict], settings: dict,
                    page: int = 1, pages: int = 1) -> bytes:
-    """Bitta brend (yoki kategoriya) narxlari — jadval ko'rinishidagi PNG."""
+    """Bitta brend narxlari — jadval ko'rinishidagi PNG."""
+    t = theme_of(settings)
     shop = (settings.get("shop_name") or "dunyabunya").strip()
     phone = (settings.get("shop_phone") or "").strip()
     channel = (settings.get("channel_link") or "").strip()
@@ -407,18 +457,19 @@ def make_list_card(title: str, items: list[dict], settings: dict,
     sana = settings.get("sana", "")
 
     sections = group_sections(items)
-    many = len(sections) > 1            # bitta bo'lim bo'lsa sarlavha kerak emas
+    many = len(sections) > 1
+    light = t["band"] is not None
 
-    head_h = 250
+    head_h = BAND_H + 14 if light else 250
     title_h = 150
     foot_h = 150
     body_h = len(items) * ROW_H + (len(sections) * SECTION_H if many else 0)
     height = max(940, head_h + title_h + body_h + foot_h)
 
-    img = _background_h(height)
+    img = _background_theme(height, t)
     draw = ImageDraw.Draw(img)
 
-    # --- logo + belgi
+    # --- logo + belgi (doim to'q fon ustida)
     logo_bottom = _draw_logo(img, draw, shop)
     badge = "NARXLAR" if pages == 1 else f"{page}/{pages}"
     f_badge = font(24, True, badge)
@@ -428,15 +479,15 @@ def make_list_card(title: str, items: list[dict], settings: dict,
     draw.text((W - PAD - bw / 2, PAD + 18 + 27), badge, font=f_badge, fill=ORANGE, anchor="mm")
 
     # --- brend sarlavhasi
-    y = logo_bottom + 52
+    y = (BAND_H + 40) if light else (logo_bottom + 52)
     lines, f_cat = _fit_lines(draw, title.upper(), W - 2 * PAD, 72, True, 2)
     for ln in lines:
-        draw.text((PAD, y), ln, font=f_cat, fill=WHITE)
+        draw.text((PAD, y), ln, font=f_cat, fill=t["text"])
         y += int(f_cat.size * 1.18)
     draw.rounded_rectangle([PAD, y + 10, PAD + 120, y + 18], radius=4, fill=ORANGE)
     if sana:
         f_d = font(24, False, sana)
-        draw.text((W - PAD, y - 34), f"{sana} holatiga", font=f_d, fill=MUTED, anchor="ra")
+        draw.text((W - PAD, y - 34), f"{sana} holatiga", font=f_d, fill=t["muted"], anchor="ra")
     y += 56
 
     # --- bo'limlar va qatorlar
@@ -451,19 +502,20 @@ def make_list_card(title: str, items: list[dict], settings: dict,
             y += SECTION_H
             row_i = 0
         for it in rows:
-            _draw_row(draw, it, y, zebra=row_i % 2 == 0)
+            _draw_row(draw, it, y, row_i % 2 == 0, t)
             y += ROW_H
             row_i += 1
 
     # --- pastki qator
     fy = height - PAD - 62
-    draw.line([(PAD, fy - 26), (W - PAD, fy - 26)], fill=(90, 100, 112), width=2)
+    draw.line([(PAD, fy - 26), (W - PAD, fy - 26)], fill=t["foot_line"], width=2)
     left_text = branches or phone
     if left_text:
         draw.rounded_rectangle([PAD, fy + 2, PAD + 28, fy + 40], radius=8, fill=ORANGE)
-        draw.rounded_rectangle([PAD + 8, fy + 10, PAD + 20, fy + 30], radius=4, fill=NAVY_DEEP)
+        draw.rounded_rectangle([PAD + 8, fy + 10, PAD + 20, fy + 30], radius=4,
+                               fill=t["bg4"] if not light else WHITE)
         f_f = font(26 if branches else 28, True, left_text)
-        draw.text((PAD + 44, fy + 6), left_text, font=f_f, fill=WHITE)
+        draw.text((PAD + 44, fy + 6), left_text, font=f_f, fill=t["text"])
     if channel:
         f_ch = font(26, False, channel)
         draw.text((W - PAD, fy + 8), channel, font=f_ch, fill=ORANGE, anchor="ra")
