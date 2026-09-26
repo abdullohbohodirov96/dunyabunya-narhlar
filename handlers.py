@@ -423,6 +423,17 @@ async def cmd_template(msg: Message, command: CommandObject):
     if await deny(msg):
         return
     arg = (command.args or "").strip()
+    if arg.lower() in ("tiklash", "standart", "reset"):
+        from config import DEFAULTS as _D
+
+        await db.set("template", _D["template"])
+        settings = await db.all_settings()
+        await msg.answer(
+            "✅ Shablon standart holatga qaytarildi. Post ostida shunday chiqadi:\n\n"
+            + formatter.render_product({"name": "KNAUF", "category": "Knauf"}, settings)
+        )
+        return
+
     if not arg:
         cur = await db.get("template")
         await msg.answer(
@@ -431,6 +442,7 @@ async def cmd_template(msg: Message, command: CommandObject):
             "{brend} {chegirma} {telefon} {telefon_link} {dokon} {kanal}</code>\n\n"
             "<i>{telefon_link} — raqam havola bo'lib chiqadi (/aloqa).</i>\n"
             "O'zgartirish: <code>/shablon</code> dan keyin yangi matnni yozing.\n"
+            "Standartga qaytarish: <code>/shablon tiklash</code>\n"
             "Maydoni bo'sh bo'lgan qator avtomatik o'chiriladi."
         )
         return

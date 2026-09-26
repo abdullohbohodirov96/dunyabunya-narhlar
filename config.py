@@ -86,4 +86,28 @@ DEFAULTS = {
     ),
 }
 
+# Avvalgi versiyalardagi standart shablonlar. Bazada shulardan biri
+# turgan bo'lsa — foydalanuvchi o'zgartirmagan degani, migratsiya yangilaydi.
+LEGACY_TEMPLATES = [
+    (
+        "🏗 <b>{nom}</b>\n"
+        "{brend_qatori}"
+        "\n"
+        "💰 Narx: <b>{narx} so'm</b>{birlik}\n"
+        "{eski_narx_qatori}"
+        "{izoh_qatori}"
+        "\n"
+        "📦 {kategoriya}\n"
+        "📞 Buyurtma: {telefon}\n"
+        "🏬 {dokon} — {kanal}"
+    ),
+    (
+        "💰 {dokon} \"{nom}\" narxlari\n"
+        "\n"
+        "📍 {dokon} barcha filiallarida\n"
+        "\n"
+        "{telefon_link}"
+    ),
+]
+
 MAX_CAPTION = 1024

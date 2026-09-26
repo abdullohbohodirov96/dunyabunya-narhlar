@@ -5,7 +5,7 @@ from typing import Optional
 
 import aiosqlite
 
-from config import DB_PATH, DEFAULTS, TZ
+from config import DB_PATH, DEFAULTS, LEGACY_TEMPLATES, TZ
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS settings (
@@ -97,7 +97,7 @@ async def init() -> None:
     await _migrate()
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 async def _migrate() -> None:
@@ -119,6 +119,17 @@ async def _migrate() -> None:
         # fon standarti oq bo'ldi
         await conn().execute(
             "UPDATE settings SET value = 'oq' WHERE key = 'card_theme' AND value = 'toq'")
+
+    if version < 3:
+        # post matni "barcha filiallarida" dan filiallar ro'yxatiga o'tdi.
+        # Foydalanuvchi o'zi yozgan shablonga tegilmaydi.
+        async with conn().execute(
+            "SELECT value FROM settings WHERE key = 'template'") as cur:
+            row = await cur.fetchone()
+        if row and row["value"] in LEGACY_TEMPLATES:
+            await conn().execute(
+                "UPDATE settings SET value = ? WHERE key = 'template'",
+                (DEFAULTS["template"],))
 
     await conn().execute(
         "INSERT INTO settings(key, value) VALUES('schema_v', ?) "
