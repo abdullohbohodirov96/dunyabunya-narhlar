@@ -94,6 +94,38 @@ async def init() -> None:
     for k, v in DEFAULTS.items():
         await _db.execute("INSERT OR IGNORE INTO settings(key, value) VALUES(?, ?)", (k, v))
     await _db.commit()
+    await _migrate()
+
+
+SCHEMA_VERSION = 2
+
+
+async def _migrate() -> None:
+    """Eski bazadagi sozlamalarni yangi standartga bir marta ko'chirish.
+
+    INSERT OR IGNORE eski qiymatni o'zgartirmaydi, shuning uchun avvalgi
+    versiyada saqlanib qolgan tanlovlar shu yerda yangilanadi.
+    """
+    async with conn().execute("SELECT value FROM settings WHERE key = 'schema_v'") as cur:
+        row = await cur.fetchone()
+    version = int(row["value"]) if row and str(row["value"]).isdigit() else 1
+
+    if version < 2:
+        # post turi PDF dan PNG rasmga o'tdi
+        async with conn().execute("SELECT value FROM settings WHERE key = 'post_mode'") as cur:
+            mode = await cur.fetchone()
+        if mode and mode["value"] in ("pdf", "prays"):
+            await conn().execute("UPDATE settings SET value = 'rasm' WHERE key = 'post_mode'")
+        # fon standarti oq bo'ldi
+        await conn().execute(
+            "UPDATE settings SET value = 'oq' WHERE key = 'card_theme' AND value = 'toq'")
+
+    await conn().execute(
+        "INSERT INTO settings(key, value) VALUES('schema_v', ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (str(SCHEMA_VERSION),),
+    )
+    await conn().commit()
 
 
 def conn() -> aiosqlite.Connection:
