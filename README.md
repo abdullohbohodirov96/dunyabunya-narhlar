@@ -166,6 +166,23 @@ mahsulot ochiladi. Tagiga hech narsa yozmasangiz, bot o'zi nomini so'raydi.
 
 ---
 
+## Xodimlar
+
+Bot standart holatda faqat `ADMIN_IDS` dagi odamga javob beradi. Boshqa
+xodimlar ham narx yuborishi uchun:
+
+1. Xodim botga `/start` yozadi — bot unga ID sini ko'rsatadi va
+   **sizga so'rov yuboradi** (tayyor buyruq bilan)
+2. Siz `/xodim 123456789` deb yozasiz — tamom, unga xabar ham boradi
+
+Xodim faqat **narx qo'shadi**: Excel fayl, rasm, `/navbat`, `/royxat`,
+`/korish`, `/statistika`. Kanal, vaqt, dizayn, shablon sozlamalariga
+tegolmaydi — ular faqat sizda.
+
+Ro'yxatni ko'rish: `/xodim` · chiqarish: `/xodim ochir 123456789`
+
+---
+
 ## Buyruqlar
 
 **Kundalik**

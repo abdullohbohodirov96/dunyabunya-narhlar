@@ -47,7 +47,7 @@ HELP = """<b>🏗 dunyabunya — narxlar boti</b>
 
 <b>Sozlash</b>
 /kanal — kanalni ulash (kanaldan post forward qiling)
-/masul 123456789 — mas'ul xodimni belgilash
+/xodim 123456789 — xodimga mahsulot qo'shish ruxsatini berish\n/masul 123456789 — mas'ul xodimni belgilash
 /vaqt 09:00,11:30,14:00,16:30,19:00 — post vaqtlari
 /dokon dunyabunya | +998(91)785-00-90 | @kanal
 /logo — logo yuklash (keyingi rasmni logo qilib oladi)
@@ -58,15 +58,83 @@ HELP = """<b>🏗 dunyabunya — narxlar boti</b>
 """
 
 
+STAFF_MENU = ReplyKeyboardMarkup(
+    keyboard=[[KeyboardButton(text="📦 Navbat"), KeyboardButton(text="📊 Statistika")]],
+    resize_keyboard=True,
+)
+
+STAFF_HELP = """<b>🏗 dunyabunya — narxlar boti</b>
+
+Narxlarni shu yerga yuborasiz, bot ularni kanalga o'zi joylaydi.
+
+<b>Qanday yuboriladi</b>
+• 📄 <b>Excel fayl</b> — barcha qatorlar navbatga tushadi
+   (tagiga kategoriya nomini yozsangiz, hammasiga o'shani qo'yadi)
+• 🖼 <b>Rasm</b> + tagiga: <code>Sement M-400 — 52000 so'm/qop</code>
+
+<b>Buyruqlar</b>
+/navbat — navbatda nechta mahsulot bor
+/royxat — ro'yxatni ko'rish
+/korish — keyingi post qanday chiqishini ko'rish
+/statistika — bugungi holat
+/id — o'z raqamingiz
+"""
+
+
 def is_admin(uid: int) -> bool:
+    """Admin — Render'dagi ADMIN_IDS ro'yxatidagi odam. Hamma narsani qila oladi."""
     return not ADMIN_IDS or uid in ADMIN_IDS
 
 
+async def staff_ids() -> list[int]:
+    raw = await db.get("staff", "")
+    return [int(x) for x in raw.replace(" ", "").split(",") if x.strip().isdigit()]
+
+
+async def is_staff(uid: int) -> bool:
+    """Xodim — mahsulot qo'sha oladi, sozlamalarga tegmaydi."""
+    return is_admin(uid) or uid in await staff_ids()
+
+
 async def deny(msg: Message) -> bool:
+    """Faqat admin uchun."""
     if is_admin(msg.from_user.id):
         return False
-    await msg.answer("⛔️ Bu bot faqat dunyabunya xodimlari uchun.")
+    if await is_staff(msg.from_user.id):
+        await msg.answer("🔒 Bu sozlamani faqat rahbar o'zgartira oladi.\n"
+                         "Siz mahsulot qo'sha olasiz: Excel fayl yoki rasm yuboring.")
+    else:
+        await _ask_access(msg)
     return True
+
+
+async def deny_staff(msg: Message) -> bool:
+    """Admin ham, xodim ham ishlata oladi."""
+    if await is_staff(msg.from_user.id):
+        return False
+    await _ask_access(msg)
+    return True
+
+
+async def _ask_access(msg: Message) -> None:
+    """Notanish odam — o'ziga ID, adminlarga so'rov."""
+    u = msg.from_user
+    await msg.answer(
+        "🔒 Sizda hali ruxsat yo'q.\n\n"
+        f"Sizning ID: <code>{u.id}</code>\n"
+        "Shu raqamni rahbarga yuboring — u sizga ruxsat beradi."
+    )
+    tag = f"@{u.username}" if u.username else (u.full_name or "—")
+    for admin in ADMIN_IDS:
+        try:
+            await msg.bot.send_message(
+                admin,
+                f"👤 <b>{tag}</b> botdan foydalanmoqchi.\n"
+                f"ID: <code>{u.id}</code>\n\n"
+                f"Ruxsat berish: <code>/xodim {u.id}</code>",
+            )
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------- start
@@ -79,7 +147,10 @@ async def cmd_start(msg: Message):
             "Shu raqamni Render'dagi <code>ADMIN_IDS</code> o'zgaruvchisiga yozing.",
         )
         return
-    if await deny(msg):
+    if await deny_staff(msg):
+        return
+    if not is_admin(msg.from_user.id):
+        await msg.answer(STAFF_HELP, reply_markup=STAFF_MENU)
         return
     await msg.answer(HELP, reply_markup=MENU)
 
@@ -164,6 +235,61 @@ async def _set_channel(msg: Message, chat_id: str, link: str):
 
 
 # ---------------------------------------------------------------- sozlamalar
+@router.message(Command("xodim"))
+async def cmd_staff(msg: Message, command: CommandObject):
+    """Mahsulot qo'sha oladigan xodimlar ro'yxati."""
+    if await deny(msg):
+        return
+    arg = (command.args or "").strip()
+    ids = await staff_ids()
+
+    if not arg:
+        lst = "\n".join(f"• <code>{i}</code>" for i in ids) or "— hali yo'q —"
+        await msg.answer(
+            f"👥 <b>Xodimlar</b> (mahsulot qo'sha oladi):\n{lst}\n\n"
+            "Qo'shish: <code>/xodim 123456789</code>\n"
+            "O'chirish: <code>/xodim ochir 123456789</code>\n\n"
+            "Xodim botga <code>/id</code> deb yozsa, o'z raqamini ko'radi.\n"
+            "<i>Xodim faqat mahsulot qo'shadi — kanal, vaqt, dizayn "
+            "sozlamalariga tegmaydi.</i>"
+        )
+        return
+
+    parts = arg.split()
+    if parts[0].lower() in ("ochir", "o'chir", "olib", "del"):
+        target = next((p for p in parts[1:] if p.isdigit()), "")
+        if not target:
+            await msg.answer("Format: <code>/xodim ochir 123456789</code>")
+            return
+        ids = [i for i in ids if i != int(target)]
+        await db.set("staff", ",".join(str(i) for i in ids))
+        await msg.answer(f"🗑 <code>{target}</code> ro'yxatdan chiqarildi.")
+        return
+
+    if not parts[0].isdigit():
+        await msg.answer("Format: <code>/xodim 123456789</code>\n"
+                         "Raqamni xodim <code>/id</code> yozib oladi.")
+        return
+
+    uid = int(parts[0])
+    if uid not in ids:
+        ids.append(uid)
+        await db.set("staff", ",".join(str(i) for i in ids))
+    await msg.answer(f"✅ <code>{uid}</code> endi mahsulot qo'sha oladi.")
+    try:
+        await msg.bot.send_message(
+            uid,
+            "✅ <b>Sizga ruxsat berildi!</b>\n\n"
+            "Endi narxlarni yuborishingiz mumkin:\n"
+            "📄 Excel fayl — barcha qatorlar navbatga tushadi\n"
+            "🖼 Rasm + tagiga mahsulot nomi va narxi\n\n"
+            "Navbatni ko'rish: /navbat",
+        )
+    except Exception:
+        await msg.answer("⚠️ Unga xabar yubora olmadim — avval u botga "
+                         "<code>/start</code> yozsin.")
+
+
 @router.message(Command("masul"))
 async def cmd_manager(msg: Message, command: CommandObject):
     if await deny(msg):
@@ -454,7 +580,7 @@ async def cmd_template(msg: Message, command: CommandObject):
 @router.message(Command("navbat"))
 @router.message(F.text == "📦 Navbat")
 async def cmd_queue(msg: Message):
-    if await deny(msg):
+    if await deny_staff(msg):
         return
     settings = await db.all_settings()
     times = scheduler.parse_times(settings["post_times"])
@@ -487,7 +613,7 @@ async def cmd_queue(msg: Message):
 
 @router.message(Command("royxat"))
 async def cmd_list(msg: Message):
-    if await deny(msg):
+    if await deny_staff(msg):
         return
     rows = await db.all_products(limit=30)
     if not rows:
@@ -521,7 +647,7 @@ async def cmd_delete(msg: Message, command: CommandObject):
 
 @router.message(Command("korish", "preview"))
 async def cmd_preview(msg: Message, command: CommandObject):
-    if await deny(msg):
+    if await deny_staff(msg):
         return
     arg = (command.args or "").strip()
     settings = await db.all_settings()
@@ -593,7 +719,7 @@ async def cmd_resume(msg: Message):
 @router.message(Command("statistika"))
 @router.message(F.text == "📊 Statistika")
 async def cmd_stats(msg: Message):
-    if await deny(msg):
+    if await deny_staff(msg):
         return
     posts = await db.posts_today()
     times = scheduler.parse_times(await db.get("post_times"))
@@ -739,7 +865,7 @@ async def cmd_clear(msg: Message):
 # ---------------------------------------------------------------- Excel
 @router.message(F.document)
 async def got_document(msg: Message):
-    if await deny(msg):
+    if await deny_staff(msg):
         return
     doc = msg.document
     name = (doc.file_name or "").lower()
@@ -798,7 +924,7 @@ async def got_document(msg: Message):
 # ---------------------------------------------------------------- rasm
 @router.message(F.photo)
 async def got_photo(msg: Message):
-    if await deny(msg):
+    if await deny_staff(msg):
         return
     file_id = msg.photo[-1].file_id
 
@@ -875,7 +1001,7 @@ async def _save_product(msg: Message, data: dict, file_id: str = ""):
 # ---------------------------------------------------------------- matn
 @router.message(F.text & ~F.text.startswith("/"))
 async def got_text(msg: Message):
-    if await deny(msg):
+    if await deny_staff(msg):
         return
     draft = await db.next_draft(msg.from_user.id)
     if draft is None:

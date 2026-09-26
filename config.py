@@ -63,6 +63,8 @@ DEFAULTS = {
     "card_theme": "oq",
     # 1 = brend dizaynidagi kartochka yasalsin, 0 = oddiy rasm yuborilsin
     "card_design": "1",
+    # mahsulot qo'sha oladigan xodimlar (Telegram ID, vergul bilan)
+    "staff": "",
     "channel_id": CHANNEL_ID,
     "manager_id": MANAGER_ID,
     "shop_phone": "+998(91)785-00-90",
