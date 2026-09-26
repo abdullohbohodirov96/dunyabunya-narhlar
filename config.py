@@ -60,12 +60,14 @@ DEFAULTS = {
     # narxlar shuncha kundan beri yangilanmasa — mas'ulga eslatma
     "stale_days": "7",
     # rasm foni: toq (mokriy asfalt) / qora / tekis / oq
-    "card_theme": "toq",
+    "card_theme": "oq",
     # 1 = brend dizaynidagi kartochka yasalsin, 0 = oddiy rasm yuborilsin
     "card_design": "1",
     "channel_id": CHANNEL_ID,
     "manager_id": MANAGER_ID,
     "shop_phone": "+998(91)785-00-90",
+    # rasm ichida chiqadigan buyurtma raqami
+    "order_phone": "+998 (91) 785-00-90",
     "shop_name": "dunyabunya",
     "channel_link": "@Dunyabunya_prays",
     # Filiallar: "Nomi|telefon" juftliklari, nuqtali vergul bilan ajratiladi

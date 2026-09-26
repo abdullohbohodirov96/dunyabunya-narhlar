@@ -314,6 +314,7 @@ MAX_ROWS = 18
 ROW_H = 76
 SECTION_H = 62
 BAND_H = 236          # yuqoridagi to'q chiziq (logo oq bo'lgani uchun kerak)
+FOOT_H = 186          # pastki chiziq: buyurtma raqami
 
 THEMES = {
     # to'q: mokriy asfalt + qora, diagonal chiziqlar bilan
@@ -378,6 +379,8 @@ def _background_theme(height: int, t: dict) -> Image.Image:
         d = ImageDraw.Draw(bg)
         d.rectangle([0, 0, W, BAND_H], fill=t["band"])
         d.rectangle([0, BAND_H - 8, W, BAND_H], fill=ORANGE)
+        d.rectangle([0, height - FOOT_H, W, height], fill=t["band"])
+        d.rectangle([0, height - FOOT_H, W, height - FOOT_H + 8], fill=ORANGE)
     return bg
 
 
@@ -462,7 +465,7 @@ def make_list_card(title: str, items: list[dict], settings: dict,
 
     head_h = BAND_H + 14 if light else 250
     title_h = 150
-    foot_h = 150
+    foot_h = FOOT_H + 20
     body_h = len(items) * ROW_H + (len(sections) * SECTION_H if many else 0)
     height = max(940, head_h + title_h + body_h + foot_h)
 
@@ -506,19 +509,28 @@ def make_list_card(title: str, items: list[dict], settings: dict,
             y += ROW_H
             row_i += 1
 
-    # --- pastki qator
-    fy = height - PAD - 62
-    draw.line([(PAD, fy - 26), (W - PAD, fy - 26)], fill=t["foot_line"], width=2)
-    left_text = branches or phone
-    if left_text:
-        draw.rounded_rectangle([PAD, fy + 2, PAD + 28, fy + 40], radius=8, fill=ORANGE)
-        draw.rounded_rectangle([PAD + 8, fy + 10, PAD + 20, fy + 30], radius=4,
-                               fill=t["bg4"] if not light else WHITE)
-        f_f = font(26 if branches else 28, True, left_text)
-        draw.text((PAD + 44, fy + 6), left_text, font=f_f, fill=t["text"])
+    # --- pastki qism: buyurtma raqami
+    top = height - FOOT_H
+    if not light:
+        draw.line([(PAD, top + 6), (W - PAD, top + 6)], fill=t["foot_line"], width=2)
+    mid = top + FOOT_H / 2
+
+    label = "BUYURTMA BERISH UCHUN"
+    f_lbl = font(23, True, label)
+    draw.text((PAD, mid - 30), label, font=f_lbl,
+              fill=ORANGE if light else t["muted"], anchor="lm")
+
+    order = (settings.get("order_phone") or phone or "").strip()
+    if order:
+        f_ph = font(46, True, order)
+        draw.text((PAD, mid + 18), order, font=f_ph, fill=WHITE, anchor="lm")
+
+    if branches:
+        f_b = font(22, False, branches)
+        draw.text((W - PAD, mid - 24), branches, font=f_b, fill=(178, 186, 196), anchor="rm")
     if channel:
-        f_ch = font(26, False, channel)
-        draw.text((W - PAD, fy + 8), channel, font=f_ch, fill=ORANGE, anchor="ra")
+        f_ch = font(27, True, channel)
+        draw.text((W - PAD, mid + 18), channel, font=f_ch, fill=ORANGE, anchor="rm")
 
     out = io.BytesIO()
     img.save(out, format="PNG", optimize=True)

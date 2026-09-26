@@ -52,7 +52,7 @@ HELP = """<b>🏗 dunyabunya — narxlar boti</b>
 /dokon dunyabunya | +998(91)785-00-90 | @kanal
 /logo — logo yuklash (keyingi rasmni logo qilib oladi)
 /fon — post rasmining orqa foni\n/rejim — post turi (rasm / pdf / mahsulot)\n/guruh — brend yoki kategoriya bo'yicha\n/dizayn — brend kartochkani yoqish/o'chirish
-/shablon — post matni shabloni\n/filial — filiallar va raqamlari\n/aloqa — raqam bog'lanadigan havola
+/shablon — post matni shabloni\n/filial — filiallar va raqamlari\n/buyurtma — rasmdagi buyurtma raqami\n/aloqa — raqam bog'lanadigan havola
 /pauza · /davom — to'xtatish / davom ettirish\n/zaxirakanal — zaxira kanalini ulash\n/zaxira — bazani hoziroq saqlash
 /statistika · /eksport · /id
 """
@@ -226,6 +226,24 @@ async def cmd_shop(msg: Message, command: CommandObject):
         await db.set("channel_link", parts[2])
     s = await db.all_settings()
     await msg.answer(f"✅ Saqlandi:\n🏬 {s['shop_name']}\n📞 {s['shop_phone']}\n🔗 {s['channel_link']}")
+
+
+@router.message(Command("buyurtma"))
+async def cmd_order_phone(msg: Message, command: CommandObject):
+    """Rasm ichida chiqadigan buyurtma raqami."""
+    if await deny(msg):
+        return
+    arg = (command.args or "").strip()
+    if not arg:
+        cur = await db.get("order_phone")
+        await msg.answer(
+            f"📞 Rasmdagi buyurtma raqami: <b>{cur}</b>\n\n"
+            "O'zgartirish: <code>/buyurtma +998 (91) 785-00-90</code>"
+        )
+        return
+    await db.set("order_phone", arg)
+    await msg.answer(f"✅ Rasmda shu raqam chiqadi: <b>{arg}</b>\n\n"
+                     "Ko'rish: <code>/korish</code>")
 
 
 @router.message(Command("filial"))
