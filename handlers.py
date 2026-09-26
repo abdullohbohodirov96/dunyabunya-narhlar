@@ -52,7 +52,7 @@ HELP = """<b>🏗 dunyabunya — narxlar boti</b>
 /dokon dunyabunya | +998(91)785-00-90 | @kanal
 /logo — logo yuklash (keyingi rasmni logo qilib oladi)
 /rejim — post turi (pdf / rasm / mahsulot)\n/guruh — brend yoki kategoriya bo'yicha\n/dizayn — brend kartochkani yoqish/o'chirish
-/shablon — post matni shabloni\n/aloqa — raqam bog'lanadigan havola
+/shablon — post matni shabloni\n/filial — filiallar va raqamlari\n/aloqa — raqam bog'lanadigan havola
 /pauza · /davom — to'xtatish / davom ettirish\n/zaxirakanal — zaxira kanalini ulash\n/zaxira — bazani hoziroq saqlash
 /statistika · /eksport · /id
 """
@@ -228,6 +228,36 @@ async def cmd_shop(msg: Message, command: CommandObject):
     await msg.answer(f"✅ Saqlandi:\n🏬 {s['shop_name']}\n📞 {s['shop_phone']}\n🔗 {s['channel_link']}")
 
 
+@router.message(Command("filial"))
+async def cmd_branches(msg: Message, command: CommandObject):
+    """Post ostida chiqadigan filiallar va ularning raqamlari."""
+    if await deny(msg):
+        return
+    import formatter as _f
+
+    arg = (command.args or "").strip()
+    if not arg:
+        rows = _f.parse_branches(await db.get("branches"))
+        cur = "\n".join(f"• {n} — {ph or '—'}" for n, ph in rows) or "— yo'q —"
+        await msg.answer(
+            f"🏬 <b>Filiallar</b>\n{cur}\n\n"
+            "O'zgartirish (nuqtali vergul bilan ajrating):\n"
+            "<code>/filial Shirinobod|+998901112233; Hasanboy|+998901112234; "
+            "Qorasaroy|+998901112235</code>\n\n"
+            "Har filialga o'z raqami bo'lmasa, bitta raqamni uchalasiga yozing."
+        )
+        return
+    rows = _f.parse_branches(arg)
+    if not rows:
+        await msg.answer("❌ Format: <code>/filial Nomi|+998901112233; Nomi2|+998...</code>")
+        return
+    await db.set("branches", arg)
+    await msg.answer(
+        "✅ Saqlandi. Post ostida shunday chiqadi:\n\n"
+        "🛒 Xarid qilish uchun:\n" + _f.branches_block({"branches": arg})
+    )
+
+
 @router.message(Command("aloqa"))
 async def cmd_contact(msg: Message, command: CommandObject):
     """Postdagi telefon raqami qaysi havolaga bog'lanishi."""
@@ -257,18 +287,18 @@ async def cmd_mode(msg: Message, command: CommandObject):
         return
     arg = (command.args or "").strip().lower()
     names = {
-        "pdf": "📄 Kategoriya narxlari — PDF fayl",
-        "rasm": "🖼 Kategoriya narxlari — rasm-jadval",
+        "rasm": "🖼 Brend narxlari — rasm-jadval (PNG)",
+        "pdf": "📄 O'sha jadval PDF fayl bo'lib",
         "mahsulot": "📦 Bitta mahsulot kartochkasi",
     }
     if arg not in names:
-        cur = await db.get("post_mode", "pdf")
+        cur = await db.get("post_mode", "rasm")
         cur = "pdf" if cur == "prays" else cur
         await msg.answer(
             f"Hozirgi rejim: <b>{names.get(cur, cur)}</b>\n\n"
             "O'zgartirish:\n"
-            "<code>/rejim pdf</code> — har post bitta kategoriya narxlari, PDF fayl\n"
-            "<code>/rejim rasm</code> — o'sha narxlar rasm-jadval ko'rinishida\n"
+            "<code>/rejim rasm</code> — narxlar jadvali rasm (PNG) bo'lib chiqadi\n"
+            "<code>/rejim pdf</code> — o'sha jadval PDF fayl bo'lib\n"
             "<code>/rejim mahsulot</code> — har post bitta mahsulot kartochkasi"
         )
         return
@@ -283,7 +313,7 @@ async def cmd_group(msg: Message, command: CommandObject):
         return
     arg = (command.args or "").strip().lower()
     names = {
-        "brend": "🏷 Har brend alohida post",
+        "brend": "🏷 Butun brend bitta post (ichida kategoriyalarga bo'linadi)",
         "kategoriya": "📂 Butun kategoriya bitta post",
     }
     if arg not in names:
@@ -294,8 +324,9 @@ async def cmd_group(msg: Message, command: CommandObject):
             f"Hozir {len(groups)} ta post guruhi bor:\n"
             + "\n".join(f"• {g}" for g in groups[:12])
             + ("\n…" if len(groups) > 12 else "")
-            + "\n\n<code>/guruh brend</code> — BAZALT EVEREST, BAZALT PETRAWOOL alohida\n"
-              "<code>/guruh kategoriya</code> — hammasi bitta BAZALT postida"
+            + "\n\n<code>/guruh brend</code> — butun KNAUF bitta postda, ichida "
+              "gipsokarton / rotband / profil bo'limlari bilan\n"
+              "<code>/guruh kategoriya</code> — GIPSOKARTON bitta post, ichida brendlar"
         )
         return
     await db.set("group_by", arg)

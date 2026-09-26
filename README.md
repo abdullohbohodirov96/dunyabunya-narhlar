@@ -11,7 +11,7 @@ Telegram bot. Mahsulotlarni Excel fayl yoki rasm orqali beresiz — qolganini bo
 |---|---|
 | 📄 **Excel/CSV import** | 30–50 ta mahsulotni bir faylda yuborasiz — har biri alohida navbatga tushadi (kategoriya, brend, birlik, eski narx bilan) |
 | 🖼 **Rasm biriktirish** | Rasm yuborasiz, tagiga nom yozasiz — bot Excel'dagi mos qatorga o'zi ulaydi (kirill/lotin, yozuv xatolari bilan ham topadi) |
-| 📄 **Kategoriya praysi** | Har post — bitta kategoriyaning to'liq narxlari, brendlangan **PDF** fayl: `💰 dunyabunya "GIPSOKARTON" narxlari` |
+| 🏷 **Brend praysi** | Har post — bitta brendning **hamma** mahsuloti bitta **PNG** rasmda, ichida kategoriya bo'limlari bilan: `KNAUF` → gipsokarton / rotband / profil |
 | ⏰ **Avtomatik jadval** | Kuniga 5 ta post: 09:00 · 11:30 · 14:00 · 16:30 · 19:00 (Toshkent vaqti) — o'zgartirish mumkin |
 | 🔄 **Aylanma navbat** | Kategoriyalar navbat bilan chiqadi, ketma-ket bir xili takrorlanmaydi |
 | ✅ **Galochka** | Har postdan keyin sizga "joylandi" xabari + kun oxirida to'liq hisobot |
@@ -131,22 +131,27 @@ Har postda navbatdagi kategoriya olinadi, uning hamma mahsuloti brendlangan PDF
 qilib kanalga tashlanadi. Post matni:
 
 ```
-💰 dunyabunya "GIPSOKARTON" narxlari
+💰 dunyabunya "KNAUF" narxlari
 
-📍 dunyabunya barcha filiallarida
-
-+998(91)785-00-90        ← havola: t.me/db_Community_manager
+🛒 Xarid qilish uchun:
+📍 Shirinobod — +998(91)785-00-90
+📍 Hasanboy — +998(91)785-00-90
+📍 Qorasaroy — +998(91)785-00-90
 ```
 
-Masalan 5 ta kategoriya bo'lsa va kuniga 5 ta post bo'lsa — har kategoriya
+Masalan 5 ta brend bo'lsa va kuniga 5 ta post bo'lsa — har kategoriya
 kuniga bir martadan chiqadi. 20 ta kategoriya bo'lsa — har biri 4 kunda bir marta.
 
 Rasm-jadval ko'rinishini afzal ko'rsangiz: `/rejim rasm`.
 
-**Guruhlash.** Standart holatda har brend alohida post bo'ladi —
-`BAZALT EVEREST` va `BAZALT PETRAWOOL` ikki xil postda chiqadi. Butun
-kategoriyani bitta postga yig'ish uchun: `/guruh kategoriya`. Qaytarish:
-`/guruh brend`. Hozirgi guruhlar ro'yxatini `/guruh` ko'rsatadi.
+**Guruhlash.** Standart holatda **butun brend bitta post** bo'ladi: Knauf
+yuborsangiz, uning gipsokartoni ham, rotbandi ham, profili ham bitta rasmda
+chiqadi — har biri o'z bo'limi bilan. Kategoriya bo'yicha bo'lish uchun:
+`/guruh kategoriya`. Hozirgi guruhlarni `/guruh` ko'rsatadi.
+
+**Filiallar.** Post ostidagi matnni `/filial` boshqaradi:
+`/filial Shirinobod|+998901112233; Hasanboy|+998901112234` — har filial alohida
+qatorda, raqami bosiladigan bo'lib chiqadi.
 
 ### Rasm bilan (ixtiyoriy)
 
@@ -185,7 +190,9 @@ mahsulot ochiladi. Tagiga hech narsa yozmasangiz, bot o'zi nomini so'raydi.
 
 **Sozlash**
 ```
-/rejim pdf     post turi: pdf / rasm / mahsulot
+/rejim rasm    post turi: rasm (PNG) / pdf / mahsulot
+/guruh brend   guruhlash: brend / kategoriya
+/filial        filiallar va raqamlari
 /aloqa         raqam bog'lanadigan havola
 /kanal · /masul · /dokon · /logo · /vaqt · /shablon · /dizayn
 /zaxirakanal · /zaxira   zaxira kanali va qo'lda saqlash
@@ -199,11 +206,12 @@ mahsulot ochiladi. Tagiga hech narsa yozmasangiz, bot o'zi nomini so'raydi.
 Hozirgi shablon post ostida shunday chiqadi:
 
 ```
-💰 dunyabunya "Gipsokarton KNAUF 12.5mm" narxlari
+💰 dunyabunya "KNAUF" narxlari
 
-📍 dunyabunya barcha filiallarida
-
-+998(91)785-00-90        ← havola: t.me/db_Community_manager
+🛒 Xarid qilish uchun:
+📍 Shirinobod — +998(91)785-00-90
+📍 Hasanboy — +998(91)785-00-90
+📍 Qorasaroy — +998(91)785-00-90
 ```
 
 Narx matnda emas, **rasm ustida** katta qilib chiqadi — shuning uchun matn qisqa.
@@ -213,11 +221,11 @@ matnni yozing. Ishlatsa bo'ladigan maydonlar:
 
 ```
 {nom} {narx} {birlik} {eski_narx} {chegirma} {izoh}
-{kategoriya} {brend} {telefon} {telefon_link} {dokon} {kanal}
+{kategoriya} {brend} {telefon} {telefon_link} {filiallar} {dokon} {kanal}
 ```
 
-`{telefon_link}` — raqam bosiladigan havola bo'lib chiqadi. Havolani `/aloqa`
-bilan o'zgartirasiz, `/aloqa yoq` desangiz oddiy matn bo'ladi.
+`{filiallar}` — har filial alohida qatorda, raqami bosiladigan (`/filial`).
+`{telefon_link}` — bitta raqam, `/aloqa` dagi havolaga bog'langan.
 
 Maydoni bo'sh bo'lgan qator **avtomatik o'chib ketadi** — ya'ni eski narxi yo'q
 mahsulotda "Eski narx:" qatori chiqmaydi.

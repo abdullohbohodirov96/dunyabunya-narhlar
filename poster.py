@@ -103,15 +103,23 @@ async def post_next(bot: Bot, manual_by: int | None = None) -> str:
     return f"✅ {p['name']}"
 
 
-async def build_category_cards(category: str, items: list[dict], settings: dict) -> list[bytes]:
-    """Kategoriya narxlarini bir nechta kartochkaga bo'lib chizadi."""
-    per = cardmaker.MAX_ROWS
-    chunks = [items[i:i + per] for i in range(0, len(items), per)][:10]
-    total = len(chunks)
+def _card_settings(settings: dict) -> dict:
+    """Kartochka uchun sozlamalar — pastki qatorda filial nomlari turadi."""
+    import formatter
+
     s = dict(settings)
     s.setdefault("sana", f"{db.now():%d.%m.%Y}")
-    return [cardmaker.make_list_card(category, chunk, s, i + 1, total)
-            for i, chunk in enumerate(chunks)]
+    names = [n for n, _ in formatter.parse_branches(settings.get("branches", ""))]
+    s["branch_names"] = " · ".join(names[:4])
+    return s
+
+
+async def build_category_cards(category: str, items: list[dict], settings: dict) -> list[bytes]:
+    """Brend narxlarini bir nechta PNG kartochkaga bo'lib chizadi."""
+    pages = cardmaker.split_pages(items)[:10]
+    s = _card_settings(settings)
+    return [cardmaker.make_list_card(category, chunk, s, i + 1, len(pages))
+            for i, chunk in enumerate(pages)]
 
 
 async def post_category(bot: Bot, settings: dict, channel: str) -> str:
@@ -131,8 +139,7 @@ async def post_category(bot: Bot, settings: dict, channel: str) -> str:
     mode = settings.get("post_mode", "pdf")
     try:
         if mode in ("pdf", "prays"):
-            s2 = dict(settings)
-            s2["sana"] = f"{db.now():%d.%m.%Y}"
+            s2 = _card_settings(settings)
             data = pricebook.make_pdf(items, s2)
             safe = "".join(ch if ch.isalnum() else "_" for ch in category).strip("_")
             fname = f"dunyabunya_{safe}_{db.now():%Y-%m-%d}.pdf"
@@ -144,7 +151,8 @@ async def post_category(bot: Bot, settings: dict, channel: str) -> str:
             return f"✅ {category} — {len(items)} ta mahsulot (PDF)"
 
         cards = await build_category_cards(category, items, settings)
-        files = [BufferedInputFile(c, filename=f"{category}_{i + 1}.jpg")
+        safe = "".join(ch if ch.isalnum() else "_" for ch in category).strip("_")
+        files = [BufferedInputFile(c, filename=f"dunyabunya_{safe}_{i + 1}.png")
                  for i, c in enumerate(cards)]
         if len(files) == 1:
             msg = await bot.send_photo(channel, files[0], caption=caption, parse_mode="HTML")

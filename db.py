@@ -330,9 +330,9 @@ async def posts_today():
 
 # ------------------------------------------------- post guruhlari (prays)
 CAT_SQL = "COALESCE(NULLIF(TRIM(category), ''), 'Boshqa mahsulotlar')"
-# kategoriya + brend: "Bazalt EVEREST"; brend bo'lmasa faqat kategoriya
-GROUP_SQL = f"TRIM({CAT_SQL} || CASE WHEN TRIM(COALESCE(brand, '')) = '' " \
-            "THEN '' ELSE ' ' || TRIM(brand) END)"
+# brend bo'yicha: butun Knauf bitta postda (ichida kategoriyalarga bo'linadi).
+# Brendi yo'q mahsulot o'z kategoriyasi ostida qoladi.
+GROUP_SQL = f"COALESCE(NULLIF(TRIM(brand), ''), {CAT_SQL})"
 
 
 async def _group_expr() -> str:

@@ -8,7 +8,7 @@ PLACEHOLDER = re.compile(r"\{(\w+)\}")
 KEYS = [
     "nom", "brend", "brend_qatori", "narx", "birlik", "eski_narx", "eski_narx_qatori",
     "chegirma", "izoh", "izoh_qatori", "kategoriya", "telefon", "telefon_link",
-    "dokon", "kanal", "sana",
+    "filiallar", "dokon", "kanal", "sana",
 ]
 
 
@@ -43,6 +43,35 @@ def _phone_link(settings: dict) -> str:
     return f'<a href="{html.escape(link, quote=True)}">{phone}</a>'
 
 
+def parse_branches(raw: str) -> list[tuple[str, str]]:
+    """'Shirinobod|+998...;Hasanboy|+998...' -> [(nom, telefon), ...]"""
+    out = []
+    for chunk in str(raw or "").split(";"):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        name, _, phone = chunk.partition("|")
+        name, phone = name.strip(), phone.strip()
+        if name:
+            out.append((name, phone))
+    return out
+
+
+def branches_block(settings: dict) -> str:
+    """Filiallar ro'yxati — har biri alohida qatorda, raqami bosiladigan."""
+    rows = parse_branches(settings.get("branches", ""))
+    if not rows:
+        return _phone_link(settings)
+    lines = []
+    for name, phone in rows:
+        line = f"📍 {html.escape(name)}"
+        if phone:
+            digits = re.sub(r"[^\d+]", "", phone)
+            line += f" — <a href=\"tel:{digits}\">{html.escape(phone)}</a>"
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def build_values(product: dict, settings: dict) -> dict:
     esc = lambda v: html.escape(str(v or "").strip())
 
@@ -75,6 +104,7 @@ def build_values(product: dict, settings: dict) -> dict:
         "kategoriya": category,
         "telefon": esc(settings.get("shop_phone")),
         "telefon_link": _phone_link(settings),
+        "filiallar": branches_block(settings),
         "dokon": esc(settings.get("shop_name")),
         "kanal": esc(settings.get("channel_link")),
         "sana": settings.get("sana", ""),

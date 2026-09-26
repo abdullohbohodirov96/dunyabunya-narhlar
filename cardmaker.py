@@ -306,11 +306,18 @@ def make_card(product: dict, settings: dict, photo_bytes: bytes | None = None) -
 
 
 # ================================================================
-#  KATEGORIYA PRAYS KARTOCHKASI  (asosiy post turi)
-#  Bir rasmda bitta kategoriya narxlari jadval ko'rinishida
+#  BREND PRAYS KARTOCHKASI  (asosiy post turi)
+#  Bitta rasmda bitta brendning hamma mahsuloti, kategoriyalarga bo'lingan:
+#
+#     KNAUF                      <- sarlavha
+#       GIPSOKARTON              <- bo'lim
+#         Knauf GKL 12.5mm  68 000 so'm / list
+#       ROTBAND
+#         Knauf Rotband 30kg  46 000 so'm / qop
 # ================================================================
-MAX_ROWS = 16          # bitta rasmga sig'adigan qator soni
-ROW_H = 78
+MAX_ROWS = 18          # bitta rasmga sig'adigan mahsulot soni
+ROW_H = 76
+SECTION_H = 62
 
 
 def _background_h(height: int) -> Image.Image:
@@ -324,24 +331,94 @@ def _background_h(height: int) -> Image.Image:
         H = old
 
 
-def make_list_card(category: str, items: list[dict], settings: dict,
+def group_sections(items: list[dict]) -> list[tuple[str, list[dict]]]:
+    """Kategoriya bo'yicha bo'limlar: bo'limlar alifbo, ichi tabiiy tartibda."""
+    from pricebook import natural_key
+
+    groups: dict[str, list] = {}
+    for it in items:
+        cat = (it.get("category") or "").strip() or "Boshqa"
+        groups.setdefault(cat, []).append(it)
+    for rows in groups.values():
+        rows.sort(key=lambda r: natural_key(r.get("name") or ""))
+    return sorted(groups.items(), key=lambda kv: kv[0].lower())
+
+
+def split_pages(items: list[dict], per_page: int = MAX_ROWS) -> list[list[dict]]:
+    """Mahsulotlarni sahifalarga bo'ladi, bo'limni imkon qadar buzmasdan."""
+    pages, cur = [], []
+    for cat, rows in group_sections(items):
+        for r in rows:
+            if len(cur) >= per_page:
+                pages.append(cur)
+                cur = []
+            cur.append(r)
+    if cur:
+        pages.append(cur)
+    return pages or [[]]
+
+
+def _draw_row(draw, item: dict, top: int, zebra: bool) -> None:
+    if zebra:
+        draw.rounded_rectangle([PAD - 14, top, W - PAD + 14, top + ROW_H - 8],
+                               radius=16, fill=ASPHALT_LIGHT)
+
+    price = _money(item.get("price")) or "—"
+    unit = (item.get("unit") or "").strip()
+    f_price = font(35, True, price)
+    f_cur = font(23, True, "so'm")
+    f_unit = font(22, False, unit)
+
+    price_w = _w(draw, price, f_price)
+    cur_w = _w(draw, "so'm", f_cur) + 8
+    unit_txt = f" / {unit}" if unit else ""
+    unit_w = _w(draw, unit_txt, f_unit) if unit_txt else 0
+
+    px = W - PAD - price_w - cur_w - unit_w - 10
+    base = top + (ROW_H - 8) / 2
+
+    name = (item.get("name") or "").strip()
+    f_n = font(30, True, name)
+    max_w = px - PAD - 40
+    if _w(draw, name, f_n) > max_w:
+        while name and _w(draw, name.rstrip() + "…", f_n) > max_w:
+            name = name[:-1]
+        name = name.rstrip() + "…"
+    draw.text((PAD + 4, base), name, font=f_n, fill=WHITE, anchor="lm")
+
+    draw.text((px, base), price, font=f_price, fill=ORANGE, anchor="lm")
+    draw.text((px + price_w + 8, base + 5), "so'm", font=f_cur, fill=ORANGE, anchor="lm")
+    if unit_txt:
+        draw.text((px + price_w + cur_w + 6, base + 6), unit_txt, font=f_unit,
+                  fill=MUTED, anchor="lm")
+
+    if not zebra:
+        draw.line([(PAD - 14, top + ROW_H - 8), (W - PAD + 14, top + ROW_H - 8)],
+                  fill=(78, 86, 97), width=1)
+
+
+def make_list_card(title: str, items: list[dict], settings: dict,
                    page: int = 1, pages: int = 1) -> bytes:
-    """Bitta kategoriya narxlari — jadval ko'rinishidagi brend kartochka."""
+    """Bitta brend (yoki kategoriya) narxlari — jadval ko'rinishidagi PNG."""
     shop = (settings.get("shop_name") or "dunyabunya").strip()
     phone = (settings.get("shop_phone") or "").strip()
     channel = (settings.get("channel_link") or "").strip()
+    branches = settings.get("branch_names", "")
     sana = settings.get("sana", "")
 
-    items = items[:MAX_ROWS]
+    sections = group_sections(items)
+    many = len(sections) > 1            # bitta bo'lim bo'lsa sarlavha kerak emas
+
     head_h = 250
     title_h = 150
     foot_h = 150
-    height = max(940, head_h + title_h + len(items) * ROW_H + foot_h)
+    body_h = len(items) * ROW_H + (len(sections) * SECTION_H if many else 0)
+    height = max(940, head_h + title_h + body_h + foot_h)
 
     img = _background_h(height)
     draw = ImageDraw.Draw(img)
 
-    # --- logo + badge
+    # --- logo + belgi
     logo_bottom = _draw_logo(img, draw, shop)
     badge = "NARXLAR" if pages == 1 else f"{page}/{pages}"
     f_badge = font(24, True, badge)
@@ -350,83 +427,47 @@ def make_list_card(category: str, items: list[dict], settings: dict,
                            radius=27, outline=ORANGE, width=3)
     draw.text((W - PAD - bw / 2, PAD + 18 + 27), badge, font=f_badge, fill=ORANGE, anchor="mm")
 
-    # --- kategoriya sarlavhasi
+    # --- brend sarlavhasi
     y = logo_bottom + 52
-    cat = category.upper()
-    lines, f_cat = _fit_lines(draw, cat, W - 2 * PAD, 72, True, 2)
+    lines, f_cat = _fit_lines(draw, title.upper(), W - 2 * PAD, 72, True, 2)
     for ln in lines:
         draw.text((PAD, y), ln, font=f_cat, fill=WHITE)
         y += int(f_cat.size * 1.18)
     draw.rounded_rectangle([PAD, y + 10, PAD + 120, y + 18], radius=4, fill=ORANGE)
-    y += 34
-
     if sana:
         f_d = font(24, False, sana)
-        draw.text((W - PAD, y - 46), f"{sana} holatiga", font=f_d, fill=MUTED, anchor="ra")
+        draw.text((W - PAD, y - 34), f"{sana} holatiga", font=f_d, fill=MUTED, anchor="ra")
+    y += 56
 
-    y += 22
-
-    # --- jadval
-    for i, p in enumerate(items):
-        top = y
-        if i % 2 == 0:
-            draw.rounded_rectangle([PAD - 14, top, W - PAD + 14, top + ROW_H - 8],
-                                   radius=16, fill=ASPHALT_LIGHT)
-
-        price = _money(p.get("price")) or "—"
-        unit = (p.get("unit") or "").strip()
-        f_price = font(36, True, price)
-        f_unit = font(23, False, unit)
-
-        price_w = _w(draw, price, f_price)
-        unit_txt = f" / {unit}" if unit else ""
-        unit_w = _w(draw, unit_txt, f_unit) if unit_txt else 0
-        f_cur = font(24, True, "so'm")
-        cur_w = _w(draw, "so'm", f_cur) + 8
-
-        right = W - PAD
-        px = right - price_w - cur_w - unit_w - 10
-        base = top + (ROW_H - 8) / 2
-
-        # nom (+ brend)
-        name = (p.get("name") or "").strip()
-        brand = (p.get("brand") or "").strip()
-        max_name_w = px - PAD - 40
-        f_n = font(31, True, name)
-        nm = name
-        if _w(draw, nm, f_n) > max_name_w:
-            while nm and _w(draw, nm.rstrip() + "…", f_n) > max_name_w:
-                nm = nm[:-1]
-            nm = nm.rstrip() + "…"
-        draw.text((PAD + 4, base - (14 if brand else 0)), nm, font=f_n, fill=WHITE, anchor="lm")
-        if brand:
-            f_b = font(22, False, brand)
-            draw.text((PAD + 4, base + 18), brand, font=f_b, fill=MUTED, anchor="lm")
-
-        # narx
-        draw.text((px, base), price, font=f_price, fill=ORANGE, anchor="lm")
-        draw.text((px + price_w + 8, base + 6), "so'm", font=f_cur, fill=ORANGE, anchor="lm")
-        if unit_txt:
-            draw.text((px + price_w + cur_w + 6, base + 7), unit_txt, font=f_unit,
-                      fill=MUTED, anchor="lm")
-
-        else:
-            draw.line([(PAD - 14, top + ROW_H - 8), (W - PAD + 14, top + ROW_H - 8)],
-                      fill=(78, 86, 97), width=1)
-        y += ROW_H
+    # --- bo'limlar va qatorlar
+    row_i = 0
+    for cat, rows in sections:
+        if many:
+            f_s = font(27, True, cat)
+            draw.rounded_rectangle([PAD - 14, y + 6, PAD + _w(draw, cat.upper(), f_s) + 30,
+                                    y + SECTION_H - 12], radius=10, fill=ORANGE)
+            draw.text((PAD + 4, y + (SECTION_H - 6) / 2 - 3), cat.upper(),
+                      font=f_s, fill=WHITE, anchor="lm")
+            y += SECTION_H
+            row_i = 0
+        for it in rows:
+            _draw_row(draw, it, y, zebra=row_i % 2 == 0)
+            y += ROW_H
+            row_i += 1
 
     # --- pastki qator
     fy = height - PAD - 62
     draw.line([(PAD, fy - 26), (W - PAD, fy - 26)], fill=(90, 100, 112), width=2)
-    if phone:
+    left_text = branches or phone
+    if left_text:
         draw.rounded_rectangle([PAD, fy + 2, PAD + 28, fy + 40], radius=8, fill=ORANGE)
         draw.rounded_rectangle([PAD + 8, fy + 10, PAD + 20, fy + 30], radius=4, fill=NAVY_DEEP)
-        f_f = font(28, True, phone)
-        draw.text((PAD + 44, fy + 4), phone, font=f_f, fill=WHITE)
+        f_f = font(26 if branches else 28, True, left_text)
+        draw.text((PAD + 44, fy + 6), left_text, font=f_f, fill=WHITE)
     if channel:
         f_ch = font(26, False, channel)
         draw.text((W - PAD, fy + 8), channel, font=f_ch, fill=ORANGE, anchor="ra")
 
     out = io.BytesIO()
-    img.save(out, format="JPEG", quality=92, optimize=True)
+    img.save(out, format="PNG", optimize=True)
     return out.getvalue()

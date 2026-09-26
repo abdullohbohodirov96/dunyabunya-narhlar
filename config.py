@@ -48,13 +48,14 @@ DEFAULTS = {
     # haftalik to'liq prays-listni kanalga tashlash: "" = o'chiq, "mon 10:00" kabi
     "pricebook_at": "",
     # post turi:
-    #   "pdf"      = kategoriya narxlari PDF fayl (asosiy)
-    #   "rasm"     = kategoriya narxlari rasm-jadval
+    #   "rasm"     = brend narxlari rasm-jadval, PNG (asosiy)
+    #   "pdf"      = o'sha jadval PDF fayl bo'lib
     #   "mahsulot" = bitta mahsulot kartochkasi
-    "post_mode": "pdf",
+    "post_mode": "rasm",
     # post qanday guruhlansin:
-    #   "brend"      = har brend alohida post (BAZALT EVEREST, BAZALT PETRAWOOL)
-    #   "kategoriya" = butun kategoriya bitta post (BAZALT)
+    #   "brend"      = butun brend bitta post (KNAUF — ichida gipsokarton,
+    #                  rotband, profil bo'limlari bilan)
+    #   "kategoriya" = butun kategoriya bitta post (GIPSOKARTON)
     "group_by": "brend",
     # narxlar shuncha kundan beri yangilanmasa — mas'ulga eslatma
     "stale_days": "7",
@@ -65,14 +66,19 @@ DEFAULTS = {
     "shop_phone": "+998(91)785-00-90",
     "shop_name": "dunyabunya",
     "channel_link": "@Dunyabunya_prays",
+    # Filiallar: "Nomi|telefon" juftliklari, nuqtali vergul bilan ajratiladi
+    "branches": (
+        "Shirinobod|+998(91)785-00-90;"
+        "Hasanboy|+998(91)785-00-90;"
+        "Qorasaroy|+998(91)785-00-90"
+    ),
     # telefon raqami shu havolaga bog'lanadi (bo'sh qoldirilsa — oddiy matn)
     "contact_link": "https://t.me/db_Community_manager",
     "template": (
         "💰 {dokon} \"{nom}\" narxlari\n"
         "\n"
-        "📍 {dokon} barcha filiallarida\n"
-        "\n"
-        "{telefon_link}"
+        "🛒 Xarid qilish uchun:\n"
+        "{filiallar}"
     ),
 }
 
