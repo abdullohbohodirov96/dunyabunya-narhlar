@@ -191,6 +191,8 @@ async def post_category(bot: Bot, settings: dict, channel: str) -> str:
 
 
 async def _after_category(bot: Bot, settings: dict, category: str, items: list, msg) -> None:
+    # chiqqan mahsulotlar navbatdan olinadi — qayta chiqmaydi
+    await db.deactivate_products([it["id"] for it in items if it.get("id")])
     await db.mark_category_posted(category)
     await db.conn().execute(
         "INSERT INTO post_log (product_id, name, posted_at, message_id, ok) VALUES (0, ?, ?, ?, 1)",
@@ -211,9 +213,9 @@ async def _after_category(bot: Bot, settings: dict, category: str, items: list, 
 async def build_pricebook(fmt: str = "pdf") -> tuple[bytes, str, int]:
     """To'liq narxlar ro'yxati fayli. (bayt, fayl_nomi, mahsulot_soni)"""
     settings = await db.all_settings()
+    # To'liq prays — butun katalog: kanalga chiqib bo'lganlari ham kiradi
     async with db.conn().execute(
-        "SELECT * FROM products WHERE active = 1 AND price <> '' "
-        "ORDER BY category, brand, name"
+        "SELECT * FROM products WHERE price <> '' ORDER BY category, brand, name"
     ) as cur:
         rows = [dict(r) for r in await cur.fetchall()]
 
@@ -246,22 +248,24 @@ async def post_pricebook(bot: Bot, chat_id: str | None = None) -> str:
 
 
 async def queue_summary(settings: dict | None = None) -> str:
-    """Navbat holatini odam tushunadigan qilib yozadi."""
+    """Navbat holati: nechta mahsulot qoldi va necha kunga yetadi."""
     settings = settings or await db.all_settings()
-    if settings.get("post_mode", "rasm") == "mahsulot":
-        left = await db.ready_count()
-        return f"📦 Navbatda: {left} ta mahsulot"
-
     st = await db.groups_status()
     per_day = max(1, len([t for t in (settings.get("post_times") or "").split(",") if t.strip()]))
-    days = max(1, round(st["total"] / per_day))
 
-    lines = [f"📦 {st['total']} ta {st['unit']} navbatda aylanadi"]
-    if st["never"]:
-        lines.append(f"🆕 {st['never']} tasi hali umuman chiqmagan")
+    if st["products"] == 0:
+        return ("📦 <b>Navbat bo'sh</b>\n"
+                "🔴 Yangi narxlar ro'yxatini (Excel) yuboring")
+
+    days = max(1, round(st["groups"] / per_day))
+    lines = [f"📦 Navbatda: <b>{st['products']}</b> ta mahsulot"]
+    if settings.get("post_mode", "rasm") != "mahsulot":
+        lines[0] += f"  ·  {st['groups']} ta {st['unit']}"
+        lines.append(f"📅 Yetadi: ~{days} kunga (kuniga {per_day} ta post)")
+    else:
+        lines.append(f"📅 Yetadi: ~{max(1, round(st['products'] / per_day))} kunga")
     if st["next_name"]:
         lines.append(f"➡️ Keyingisi: <b>{st['next_name']}</b> ({st['next_count']} ta mahsulot)")
-    lines.append(f"🔄 Har {st['unit']} ~{days} kunda bir marta chiqadi")
     return "\n".join(lines)
 
 
@@ -286,11 +290,11 @@ async def _is_quiet(settings: dict) -> bool:
 async def alert_empty(bot: Bot, force: bool = False) -> None:
     """Narx tugasa yoki eskirsa — mas'ulga va adminlarga eslatma."""
     settings = await db.all_settings()
-    prays = settings.get("post_mode", "pdf") != "mahsulot"
     left = await db.queue_left()
-    # prays rejimida kategoriyalar aylanadi — faqat umuman narx qolmasa muammo.
-    # mahsulot rejimida esa har mahsulot bir marta chiqadi, shuning uchun zaxira kerak.
-    threshold = 0 if prays else int(settings.get("low_stock", "5") or 5)
+    # chiqqan mahsulot navbatdan olinadi, ya'ni navbat kamayib boradi —
+    # tugashidan oldin ogohlantiramiz
+    per_day = max(1, len([t for t in (settings.get("post_times") or "").split(",") if t.strip()]))
+    threshold = max(int(settings.get("low_stock", "5") or 5), per_day)
     stale_days = int(settings.get("stale_days", "7") or 7)
     age = await db.price_age_days()
     stale = age is not None and age >= stale_days
@@ -305,7 +309,7 @@ async def alert_empty(bot: Bot, force: bool = False) -> None:
     no_photo = await db.no_photo_count()
     no_price = await db.no_price_count()
 
-    unit_word = "kategoriya" if prays else "mahsulot"
+    unit_word = "mahsulot"
     if left == 0:
         head = "🔴 <b>NAVBAT BO'SH!</b> Kanalga joylash uchun narx qolmadi."
     elif stale:
@@ -354,12 +358,9 @@ async def daily_report(bot: Bot) -> None:
     lines += ["", f"📊 Reja: {plan} ta · Bajarildi: {len(posts)} ta"]
     if len(posts) < plan:
         lines.append(f"⚠️ {plan - len(posts)} ta post qolib ketdi.")
-    prays = settings.get("post_mode", "rasm") != "mahsulot"
     lines.append(await queue_summary(settings))
-    if left == 0:
-        lines.append("\n🔴 Narx qolmadi — yangi ro'yxat yuboring!")
-    elif not prays and left < plan:
-        lines.append("\n🔴 Ertaga uchun yetmaydi — yangi mahsulotlar yuboring!")
+    if 0 < left < plan:
+        lines.append("\n🔴 Ertaga uchun yetmaydi — yangi ro'yxat yuboring!")
     age = await db.price_age_days()
     if age is not None and age >= int(settings.get("stale_days", "7") or 7):
         lines.append(f"⚠️ Narxlar {age} kundan beri yangilanmadi.")

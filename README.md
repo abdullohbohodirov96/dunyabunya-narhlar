@@ -13,7 +13,7 @@ Telegram bot. Mahsulotlarni Excel fayl yoki rasm orqali beresiz — qolganini bo
 | 🖼 **Rasm biriktirish** | Rasm yuborasiz, tagiga nom yozasiz — bot Excel'dagi mos qatorga o'zi ulaydi (kirill/lotin, yozuv xatolari bilan ham topadi) |
 | 🏷 **Brend praysi** | Har post — bitta brendning **hamma** mahsuloti bitta **PNG** rasmda, ichida kategoriya bo'limlari bilan: `KNAUF` → gipsokarton / rotband / profil |
 | ⏰ **Avtomatik jadval** | Kuniga 5 ta post: 09:00 · 11:30 · 14:00 · 16:30 · 19:00 (Toshkent vaqti) — o'zgartirish mumkin |
-| 🔄 **Aylanma navbat** | Kategoriyalar navbat bilan chiqadi, ketma-ket bir xili takrorlanmaydi |
+| 🔄 **Kamayuvchi navbat** | Kanalga chiqqan mahsulot navbatdan olinadi, qayta chiqmaydi. Har hafta yangi Excel yuborasiz — navbat qaytadan to'ladi |
 | ✅ **Galochka** | Har postdan keyin sizga "joylandi" xabari + kun oxirida to'liq hisobot |
 | 🔔 **Eslatma** | Narx tugasa yoki 7 kundan beri yangilanmasa — mas'ul xodimga **har 5 daqiqada** yozib turadi (tunda bezovta qilmaydi) |
 | 📋 **To'liq prays** | Butun bazani bitta **PDF/Excel** qilib ham beradi — `/prays` |

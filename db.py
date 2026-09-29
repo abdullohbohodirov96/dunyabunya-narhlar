@@ -496,18 +496,39 @@ async def price_age_days() -> int | None:
     return None if d is None else (now() - d).days
 
 
-async def groups_status() -> dict:
-    """Navbat holati: jami guruh, hali chiqmagani, keyingisi."""
-    cats = await categories()
+async def pending_products() -> int:
+    """Navbatda turgan (hali kanalga chiqmagan) mahsulotlar soni."""
     async with conn().execute(
-        "SELECT category, post_count FROM cat_log") as cur:
-        posted = {r["category"]: r["post_count"] or 0 for r in await cur.fetchall()}
+        "SELECT COUNT(*) c FROM products WHERE active = 1 AND price <> ''"
+    ) as cur:
+        return (await cur.fetchone())["c"]
 
-    never = [c for c in cats if posted.get(c, 0) == 0]
+
+async def deactivate_products(ids: list[int]) -> int:
+    """Kanalga chiqqan mahsulotlarni navbatdan olib tashlaydi.
+
+    O'chirmaymiz, faqat active = 0 qilamiz: keyingi hafta o'sha mahsulot
+    yangi narx bilan qayta yuborilsa, u yana navbatga tushadi.
+    """
+    if not ids:
+        return 0
+    marks = ",".join("?" for _ in ids)
+    cur = await conn().execute(
+        f"UPDATE products SET active = 0, post_count = post_count + 1, "
+        f"last_posted_at = ? WHERE id IN ({marks})",
+        [iso(), *ids],
+    )
+    await conn().commit()
+    return cur.rowcount
+
+
+async def groups_status() -> dict:
+    """Navbat holati: nechta mahsulot, nechta guruh, keyingisi."""
+    cats = await categories()
     picked = await pick_next_category()
     return {
-        "total": len(cats),
-        "never": len(never),
+        "products": await pending_products(),
+        "groups": len(cats),
         "next_name": picked[0] if picked else "",
         "next_count": len(picked[1]) if picked else 0,
         "unit": "brend" if (await get("group_by", "brend")) == "brend" else "kategoriya",
@@ -515,10 +536,8 @@ async def groups_status() -> dict:
 
 
 async def queue_left() -> int:
-    """Rejimga qarab: navbatdagi kategoriya yoki mahsulot soni."""
-    if (await get("post_mode", "pdf")) in ("pdf", "rasm", "prays"):
-        return len(await categories())
-    return await ready_count()
+    """Navbatda qolgan mahsulotlar soni (rejimdan qat'i nazar)."""
+    return await pending_products()
 
 
 # ---------------------------------------------------------------- draftlar
