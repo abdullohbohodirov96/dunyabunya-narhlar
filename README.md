@@ -190,7 +190,9 @@ Ro'yxatni ko'rish: `/xodim` · chiqarish: `/xodim ochir 123456789`
 /navbat        navbatda nechta mahsulot bor, necha kunga yetadi
 /royxat        ro'yxat (ID bilan) — 💸 narxsiz, 🖼 rasmsiz belgilari bilan
 /korish        keyingi post qanday chiqishini ko'rish (kanalga chiqmaydi)
-/ochirish 12   navbatdan olib tashlash
+/ochirish 12   bitta mahsulotni o'chirish
+/ochirish Nova        shu brend/kategoriyaning hammasi
+/ochirish hammasi     butun bazani tozalash (tasdiq so'raydi)
 /hozir         hoziroq keyingi postni kanalga joylash
 /statistika    bugungi va umumiy holat
 ```

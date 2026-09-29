@@ -261,6 +261,29 @@ async def delete_product(pid: int) -> bool:
     return cur.rowcount > 0
 
 
+async def wipe_products(group: str = "") -> int:
+    """Mahsulotlarni butunlay o'chiradi. group bo'sh bo'lsa — hammasini.
+
+    post_log (tarix) va kategoriya rasmlari saqlanib qoladi.
+    """
+    if group:
+        expr = await _group_expr()
+        cur = await conn().execute(
+            f"DELETE FROM products WHERE {expr} = ?", (group,))
+        await conn().execute(
+            "DELETE FROM cat_log WHERE LOWER(TRIM(category)) = LOWER(TRIM(?))", (group,))
+    else:
+        cur = await conn().execute("DELETE FROM products")
+        await conn().execute("DELETE FROM cat_log")
+    await conn().commit()
+    return cur.rowcount
+
+
+async def total_products() -> int:
+    async with conn().execute("SELECT COUNT(*) c FROM products") as cur:
+        return (await cur.fetchone())["c"]
+
+
 async def all_products(limit: int = 500):
     async with conn().execute(
         "SELECT * FROM products WHERE active = 1 ORDER BY post_count ASC, id ASC LIMIT ?", (limit,)

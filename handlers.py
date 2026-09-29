@@ -42,7 +42,7 @@ HELP = """<b>🏗 dunyabunya — narxlar boti</b>
 /navbat — navbatda nechta mahsulot bor
 /royxat — navbatdagi ro'yxat (ID bilan)
 /korish — keyingi post qanday chiqishini ko'rish
-/ochirish 12 — navbatdan o'chirish
+/ochirish — mahsulot, brend yoki butun bazani o'chirish
 /hozir — hoziroq keyingi postni kanalga joylash
 
 <b>Sozlash</b>
@@ -681,14 +681,71 @@ async def cmd_list(msg: Message):
 
 @router.message(Command("ochirish"))
 async def cmd_delete(msg: Message, command: CommandObject):
+    """Bitta mahsulot, bitta brend yoki butun bazani o'chirish."""
     if await deny(msg):
         return
     arg = (command.args or "").strip()
-    if not arg.isdigit():
-        await msg.answer("Format: <code>/ochirish 12</code> (ID ni /royxat dan oling)")
+    low = arg.lower()
+
+    if not arg:
+        total = await db.total_products()
+        await msg.answer(
+            f"🗑 <b>O'chirish</b>  (bazada {total} ta mahsulot)\n\n"
+            "<code>/ochirish 12</code> — bitta mahsulot (ID ni /royxat dan oling)\n"
+            "<code>/ochirish Nova</code> — shu brend/kategoriyaning hammasi\n"
+            "<code>/ochirish hammasi</code> — butun bazani tozalash\n\n"
+            "<i>Yangi narxlar ro'yxatini yuborishdan oldin eskisini tozalasangiz, "
+            "kanalga eski mahsulot chiqib qolmaydi.</i>"
+        )
         return
-    ok = await db.delete_product(int(arg))
-    await msg.answer("🗑 O'chirildi." if ok else "❌ Bunday ID topilmadi.")
+
+    if arg.isdigit():
+        ok = await db.delete_product(int(arg))
+        await msg.answer("🗑 O'chirildi." if ok else "❌ Bunday ID topilmadi.")
+        return
+
+    # --- butun baza
+    if low.startswith("hammasi"):
+        total = await db.total_products()
+        if not low.endswith(("ha", "tasdiq")):
+            await msg.answer(
+                f"⚠️ <b>Bazadagi {total} ta mahsulot o'chiriladi.</b>\n"
+                "Kategoriya rasmlari va post tarixi saqlanib qoladi.\n\n"
+                "Tasdiqlash: <code>/ochirish hammasi ha</code>"
+            )
+            return
+        await backup.save(msg.bot, "tozalashdan oldin")
+        n = await db.wipe_products()
+        await msg.answer(
+            f"🗑 <b>{n} ta mahsulot o'chirildi.</b> Baza toza.\n\n"
+            "Endi yangi Excel faylni yuboring."
+        )
+        return
+
+    # --- bitta brend / kategoriya
+    parts = arg.split()
+    confirm = parts[-1].lower() in ("ha", "tasdiq")
+    name = " ".join(parts[:-1]) if confirm else arg
+
+    groups = await db.categories()
+    from matching import best_match, normalize
+    hit = best_match(name, {normalize(g): g for g in groups}, threshold=85)
+    if not hit:
+        await msg.answer(
+            f"❌ <b>{name}</b> topilmadi.\n\n"
+            + ("Navbatdagilar: " + ", ".join(groups[:12]) if groups else "Navbat bo'sh.")
+        )
+        return
+
+    count = len(await db.category_items(hit))
+    if not confirm:
+        await msg.answer(
+            f"⚠️ <b>{hit}</b> — {count} ta mahsulot o'chiriladi.\n\n"
+            f"Tasdiqlash: <code>/ochirish {hit} ha</code>"
+        )
+        return
+    n = await db.wipe_products(hit)
+    await msg.answer(f"🗑 <b>{hit}</b> o'chirildi ({n} ta mahsulot).")
 
 
 @router.message(Command("korish", "preview"))
