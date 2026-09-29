@@ -183,6 +183,28 @@ Ro'yxatni ko'rish: `/xodim` · chiqarish: `/xodim ochir 123456789`
 
 ---
 
+## Tugmalar
+
+Botni boshqarish uchun buyruq yozish shart emas — `/start` bosilganda
+pastda doimiy tugmalar chiqadi:
+
+```
+📦 Navbat        👁 Ko'rish
+▶️ Hozir joylash  📋 Prays
+🗑 Tozalash       ⚙️ Sozlamalar
+```
+
+**⚙️ Sozlamalar** ichida hammasi tugma bilan: post turi, guruhlash, fon
+rangi, post vaqtlari, filiallar, buyurtma raqami, kategoriya rasmlari,
+xodimlar, to'xtatish/davom, zaxira.
+
+O'chirishda bot **tasdiq tugmasini** ko'rsatadi (✅ Ha / ❌ Bekor) — matn
+yozib tasdiqlash kerak emas.
+
+Xodimlarga qisqartirilgan menyu chiqadi: Navbat · Ko'rish · Statistika.
+
+---
+
 ## Buyruqlar
 
 **Kundalik**

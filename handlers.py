@@ -5,13 +5,12 @@ import os
 
 from aiogram import F, Router
 from aiogram.filters import Command, CommandObject
-from aiogram.types import (
-    BufferedInputFile, FSInputFile, KeyboardButton, Message, ReplyKeyboardMarkup,
-)
+from aiogram.types import BufferedInputFile, CallbackQuery, FSInputFile, Message
 
 import backup
 import db
 import formatter
+import menus
 import parsing
 import poster
 import pricelist
@@ -20,14 +19,6 @@ from config import ADMIN_IDS, DB_PATH
 
 log = logging.getLogger("handlers")
 router = Router()
-
-MENU = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="📦 Navbat"), KeyboardButton(text="📊 Statistika")],
-        [KeyboardButton(text="▶️ Hozir joylash"), KeyboardButton(text="⚙️ Sozlamalar")],
-    ],
-    resize_keyboard=True,
-)
 
 HELP = """<b>🏗 dunyabunya — narxlar boti</b>
 
@@ -38,7 +29,9 @@ HELP = """<b>🏗 dunyabunya — narxlar boti</b>
    <code>Sement M-400 — 52000 so'm/qop</code>
    (nomi Excel'da bor bo'lsa, rasm o'sha mahsulotga ulanadi)
 
-<b>Asosiy buyruqlar</b>
+<b>Pastdagi tugmalardan foydalaning</b> — hech narsa yozish shart emas.
+
+<b>Buyruqlar ham bor</b>
 /navbat — navbatda nechta mahsulot bor
 /royxat — navbatdagi ro'yxat (ID bilan)
 /korish — keyingi post qanday chiqishini ko'rish
@@ -58,11 +51,6 @@ HELP = """<b>🏗 dunyabunya — narxlar boti</b>
 """
 
 
-STAFF_MENU = ReplyKeyboardMarkup(
-    keyboard=[[KeyboardButton(text="📦 Navbat"), KeyboardButton(text="📊 Statistika")]],
-    resize_keyboard=True,
-)
-
 STAFF_HELP = """<b>🏗 dunyabunya — narxlar boti</b>
 
 Narxlarni shu yerga yuborasiz, bot ularni kanalga o'zi joylaydi.
@@ -71,14 +59,9 @@ Narxlarni shu yerga yuborasiz, bot ularni kanalga o'zi joylaydi.
 • 📄 <b>Excel fayl</b> — barcha qatorlar navbatga tushadi
    (tagiga kategoriya nomini yozsangiz, hammasiga o'shani qo'yadi)
 • 🖼 <b>Rasm</b> + tagiga: <code>Sement M-400 — 52000 so'm/qop</code>
+• 🖼 Kategoriya rasmi: rasm + tagiga kategoriya nomi
 
-<b>Buyruqlar</b>
-/navbat — navbatda nechta mahsulot bor
-/royxat — ro'yxatni ko'rish
-/korish — keyingi post qanday chiqishini ko'rish
-/rasm — kategoriyaga rasm qo'yish
-/statistika — bugungi holat
-/id — o'z raqamingiz
+Pastdagi tugmalardan foydalaning — hech narsa yozish shart emas.
 """
 
 
@@ -137,7 +120,6 @@ async def _ask_access(msg: Message) -> None:
         except Exception:
             pass
 
-
 # ---------------------------------------------------------------- start
 @router.message(Command("start", "yordam", "help"))
 async def cmd_start(msg: Message):
@@ -151,9 +133,9 @@ async def cmd_start(msg: Message):
     if await deny_staff(msg):
         return
     if not is_admin(msg.from_user.id):
-        await msg.answer(STAFF_HELP, reply_markup=STAFF_MENU)
+        await msg.answer(STAFF_HELP, reply_markup=menus.STAFF)
         return
-    await msg.answer(HELP, reply_markup=MENU)
+    await msg.answer(HELP, reply_markup=menus.MAIN)
 
 
 @router.message(Command("id"))
@@ -844,25 +826,6 @@ async def cmd_stats(msg: Message):
     await msg.answer("\n".join(lines))
 
 
-@router.message(F.text == "⚙️ Sozlamalar")
-async def cmd_settings(msg: Message):
-    if await deny(msg):
-        return
-    s = await db.all_settings()
-    await msg.answer(
-        "⚙️ <b>Sozlamalar</b>\n\n"
-        f"📢 Kanal: <code>{s['channel_id'] or '—'}</code>\n"
-        f"⏰ Vaqtlar: <code>{s['post_times']}</code>\n"
-        f"👤 Mas'ul: <code>{s['manager_id'] or '—'}</code>\n"
-        f"🎨 Brend kartochka: {'yoqilgan' if s['card_design'] == '1' else 'o‘chirilgan'}\n"
-        f"🔔 Eslatma: har {s['remind_every_min']} daq "
-        f"(tinch soat {s['quiet_from']}–{s['quiet_to']})\n"
-        f"📉 Ogohlantirish chegarasi: {s['low_stock']} ta\n"
-        f"🗓 Kunlik hisobot: {s['report_at']}\n\n"
-        "O'zgartirish: /vaqt · /kanal · /masul · /dokon · /dizayn · /shablon"
-    )
-
-
 @router.message(Command("prays", "prays"))
 async def cmd_pricebook(msg: Message, command: CommandObject):
     """Brendlangan to'liq narxlar ro'yxati — PDF va Excel."""
@@ -1161,7 +1124,7 @@ async def got_text(msg: Message):
     draft = await db.next_draft(msg.from_user.id)
     if draft is None:
         await msg.answer("Tushunmadim 🤔\nExcel fayl yoki rasm yuboring, "
-                         "yoki /yordam ni bosing.", reply_markup=MENU)
+                         "yoki /yordam ni bosing.", reply_markup=menus.MAIN)
         return
 
     text = msg.text.strip()
@@ -1195,3 +1158,255 @@ async def got_text(msg: Message):
 
     await db.drop_draft(draft["id"])
     await msg.answer("Bekor qilindi.")
+
+
+# ================================================================
+#  TUGMALAR — hamma narsani yozmasdan, bosib qilish uchun
+# ================================================================
+async def _edit(cb: CallbackQuery, text: str, markup=None) -> None:
+    try:
+        await cb.message.edit_text(text, reply_markup=markup)
+    except Exception:
+        await cb.message.answer(text, reply_markup=markup)
+
+
+async def _settings_text() -> str:
+    s = await db.all_settings()
+    modes = {"rasm": "Rasm (PNG)", "pdf": "PDF fayl", "mahsulot": "Bitta mahsulot"}
+    themes = {"oq": "Oq", "toq": "To'q", "qora": "Qora", "tekis": "Tekis"}
+    return (
+        "⚙️ <b>Sozlamalar</b>\n\n"
+        f"🖼 Post turi: <b>{modes.get(s.get('post_mode'), s.get('post_mode'))}</b>\n"
+        f"🏷 Guruhlash: <b>{s.get('group_by')}</b>\n"
+        f"🎨 Fon: <b>{themes.get(s.get('card_theme'), s.get('card_theme'))}</b>\n"
+        f"⏰ Vaqtlar: <code>{s.get('post_times')}</code>\n"
+        f"📢 Kanal: <code>{s.get('channel_id') or '—'}</code>\n"
+        + ("\n⏸ <b>Bot pauzada</b>" if s.get("paused") == "1" else "")
+    )
+
+
+@router.callback_query(F.data.startswith("m:"))
+async def cb_menu(cb: CallbackQuery):
+    """Menyular orasida yurish."""
+    if not is_admin(cb.from_user.id):
+        await cb.answer("Faqat rahbar uchun", show_alert=True)
+        return
+    what = cb.data.split(":", 1)[1]
+    s = await db.all_settings()
+
+    if what == "asosiy":
+        await _edit(cb, await _settings_text(), menus.settings_menu(s))
+    elif what == "rejim":
+        await _edit(cb, "🖼 <b>Post turi</b>\n\nKanalga nima chiqsin?",
+                    menus.mode_menu(s.get("post_mode", "rasm")))
+    elif what == "guruh":
+        await _edit(cb, "🏷 <b>Guruhlash</b>\n\nBitta postga nima yig'ilsin?",
+                    menus.group_menu(s.get("group_by", "brend")))
+    elif what == "fon":
+        await _edit(cb, "🎨 <b>Fon rangi</b>\n\nTanlangandan keyin namuna ko'rsataman.",
+                    menus.theme_menu(s.get("card_theme", "oq")))
+    elif what == "vaqt":
+        await _edit(cb, "⏰ <b>Post vaqtlari</b>\n\nO'zingiz yozmoqchi bo'lsangiz:\n"
+                        "<code>/vaqt 09:00,13:00,18:00</code>",
+                    menus.times_menu(s.get("post_times", "")))
+    elif what == "filial":
+        import formatter as _f
+        rows = _f.parse_branches(s.get("branches", ""))
+        cur = "\n".join(f"• {n} — {ph or '—'}" for n, ph in rows) or "— yo'q —"
+        await _edit(cb, f"🏬 <b>Filiallar</b>\n{cur}\n\nO'zgartirish:\n"
+                        "<code>/filial Shiribom|+998901112233; Hasanboy|+998901112234</code>",
+                    menus.settings_menu(s))
+    elif what == "buyurtma":
+        await _edit(cb, f"📞 <b>Rasmdagi buyurtma raqami</b>\n<b>{s.get('order_phone')}</b>\n\n"
+                        "O'zgartirish: <code>/buyurtma +998 90 123 45 67</code>",
+                    menus.settings_menu(s))
+    elif what == "rasmlar":
+        await cb.message.answer("⏳")
+        await cmd_cat_photos(cb.message)
+    elif what == "xodim":
+        ids = await staff_ids()
+        lst = "\n".join(f"• <code>{i}</code>" for i in ids) or "— hali yo'q —"
+        await _edit(cb, f"👥 <b>Xodimlar</b>\n{lst}\n\n"
+                        "Qo'shish: <code>/xodim 123456789</code>\n"
+                        "Xodim botga <code>/id</code> yozsa, raqamini ko'radi.",
+                    menus.settings_menu(s))
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("set:"))
+async def cb_set(cb: CallbackQuery):
+    """Sozlamani o'zgartirish."""
+    if not is_admin(cb.from_user.id):
+        await cb.answer("Faqat rahbar uchun", show_alert=True)
+        return
+    _, key, value = cb.data.split(":", 2)
+
+    if key == "rejim":
+        await db.set("post_mode", value)
+        await cb.answer("✅ Saqlandi")
+        await _edit(cb, "🖼 <b>Post turi</b>", menus.mode_menu(value))
+    elif key == "guruh":
+        await db.set("group_by", value)
+        await cb.answer("✅ Saqlandi")
+        await _edit(cb, "🏷 <b>Guruhlash</b>", menus.group_menu(value))
+    elif key == "vaqt":
+        await db.set("post_times", value)
+        await scheduler.reload_jobs()
+        await cb.answer("✅ Saqlandi")
+        await _edit(cb, "⏰ <b>Post vaqtlari</b>", menus.times_menu(value))
+    elif key == "fon":
+        await db.set("card_theme", value)
+        await cb.answer("✅ Saqlandi, namuna tayyorlanmoqda…")
+        await _edit(cb, "🎨 <b>Fon rangi</b>", menus.theme_menu(value))
+        await _send_preview(cb.message, cb.bot)
+
+
+@router.callback_query(F.data.startswith("act:"))
+async def cb_action(cb: CallbackQuery):
+    """Tugma bilan bajariladigan ishlar."""
+    what = cb.data.split(":", 1)[1]
+    if what == "yop":
+        try:
+            await cb.message.delete()
+        except Exception:
+            pass
+        await cb.answer()
+        return
+
+    if not is_admin(cb.from_user.id):
+        await cb.answer("Faqat rahbar uchun", show_alert=True)
+        return
+
+    if what == "hozir":
+        await cb.answer("⏳ Joylanmoqda…")
+        await cb.message.answer(await poster.post_next(cb.bot, manual_by=cb.from_user.id))
+    elif what in ("pauza", "davom"):
+        await db.set("paused", "1" if what == "pauza" else "0")
+        await cb.answer("⏸ To'xtatildi" if what == "pauza" else "▶️ Davom etamiz")
+        await _edit(cb, await _settings_text(), menus.settings_menu(await db.all_settings()))
+    elif what == "zaxira":
+        await cb.answer("⏳")
+        await cb.message.answer(await backup.save(cb.bot, "qo'lda"))
+    elif what == "stat":
+        await cb.answer()
+        await cmd_stats(cb.message)
+
+
+@router.callback_query(F.data.startswith("prays:"))
+async def cb_pricebook(cb: CallbackQuery):
+    if not is_admin(cb.from_user.id):
+        await cb.answer("Faqat rahbar uchun", show_alert=True)
+        return
+    what = cb.data.split(":", 1)[1]
+    await cb.answer("⏳ Tayyorlanmoqda…")
+    if what == "kanal":
+        await cb.message.answer(await poster.post_pricebook(cb.bot))
+        return
+    data, name, count = await poster.build_pricebook("xlsx" if what == "excel" else "pdf")
+    if not count:
+        await cb.message.answer("Bazada narxli mahsulot yo'q.")
+        return
+    await cb.message.answer_document(BufferedInputFile(data, filename=name),
+                                     caption=f"📋 {count} ta mahsulot")
+
+
+@router.callback_query(F.data.startswith("del:"))
+async def cb_delete(cb: CallbackQuery):
+    """O'chirish — tasdiq tugmasi bilan."""
+    if not is_admin(cb.from_user.id):
+        await cb.answer("Faqat rahbar uchun", show_alert=True)
+        return
+    parts = cb.data.split(":", 2)
+    kind = parts[1]
+
+    if kind == "all":
+        total = await db.total_products()
+        await _edit(cb, f"⚠️ <b>Bazadagi {total} ta mahsulot o'chiriladi.</b>\n"
+                        "Kategoriya rasmlari va tarix saqlanadi.\n\nRostdan o'chiramizmi?",
+                    menus.confirm("del:allyes"))
+    elif kind == "allyes":
+        await backup.save(cb.bot, "tozalashdan oldin")
+        n = await db.wipe_products()
+        await _edit(cb, f"🗑 <b>{n} ta mahsulot o'chirildi.</b> Baza toza.\n\n"
+                        "Endi yangi Excel faylni yuboring.")
+    elif kind == "g":
+        group = parts[2]
+        count = len(await db.category_items(group))
+        await _edit(cb, f"⚠️ <b>{group}</b> — {count} ta mahsulot o'chiriladi.\n\nRostdanmi?",
+                    menus.confirm(f"del:gyes:{group}"))
+    elif kind == "gyes":
+        group = parts[2]
+        n = await db.wipe_products(group)
+        await _edit(cb, f"🗑 <b>{group}</b> o'chirildi ({n} ta mahsulot).")
+    await cb.answer()
+
+
+async def _send_preview(msg: Message, bot) -> None:
+    """Keyingi post qanday chiqishini ko'rsatadi."""
+    settings = await db.all_settings()
+    if settings.get("post_mode", "rasm") == "mahsulot":
+        row = await db.pick_next()
+        if row is None:
+            await msg.answer("Navbat bo'sh. Excel fayl yuboring.")
+            return
+        image, caption = await poster.build_post(bot, dict(row), settings)
+        await msg.answer_photo(BufferedInputFile(image, filename="p.png"),
+                               caption=caption + "\n\n<i>👁 Namuna</i>")
+        return
+
+    picked = await db.pick_next_category()
+    if picked is None:
+        await msg.answer("📦 Navbat bo'sh. Yangi Excel faylni yuboring.")
+        return
+    category, items = picked
+    caption = formatter.render_product({"name": category.upper(), "category": category}, settings)
+    note = "\n\n<i>👁 Namuna — kanalga joylanmadi</i>"
+    if settings.get("post_mode", "rasm") in ("pdf", "prays"):
+        import pricebook
+        s2 = poster._card_settings(settings)
+        data = pricebook.make_pdf(items, s2)
+        await msg.answer_document(BufferedInputFile(data, filename=f"{category}.pdf"),
+                                  caption=caption + note, reply_markup=menus.after_preview())
+    else:
+        cards = await poster.build_category_cards(category, items, settings, bot)
+        await msg.answer_photo(BufferedInputFile(cards[0], filename="preview.png"),
+                               caption=caption + note, reply_markup=menus.after_preview())
+
+
+# ---------------------------------------------------------------- pastki tugmalar
+@router.message(F.text == "⚙️ Sozlamalar")
+async def btn_settings(msg: Message):
+    if await deny(msg):
+        return
+    await msg.answer(await _settings_text(), reply_markup=menus.settings_menu(await db.all_settings()))
+
+
+@router.message(F.text == "👁 Ko'rish")
+async def btn_preview(msg: Message):
+    if await deny_staff(msg):
+        return
+    await _send_preview(msg, msg.bot)
+
+
+@router.message(F.text == "📋 Prays")
+async def btn_pricebook(msg: Message):
+    if await deny(msg):
+        return
+    await msg.answer("📋 <b>To'liq prays-list</b>\nQaysi ko'rinishda kerak?",
+                     reply_markup=menus.pricebook_menu())
+
+
+@router.message(F.text == "🗑 Tozalash")
+async def btn_wipe(msg: Message):
+    if await deny(msg):
+        return
+    total = await db.total_products()
+    if not total:
+        await msg.answer("Baza allaqachon bo'sh.")
+        return
+    groups = await db.categories()
+    await msg.answer(
+        f"🗑 <b>Tozalash</b> — bazada {total} ta mahsulot\n\n"
+        "Nimani o'chiramiz?",
+        reply_markup=menus.wipe_menu(total, groups),
+    )
