@@ -16,10 +16,15 @@ COLUMN_ALIASES = {
         "отображаемое имя", "display name", "полное наименование",
     ],
     "price": [
-        "narx", "narxi", "narh", "yangi narx", "sotuv narxi", "summa",
         "chakana", "chakana narx", "chakana narxi", "dona narxi",
+        "narx", "narxi", "narh", "yangi narx", "sotuv narxi", "summa",
         "цена", "стоимость", "розничная", "розница", "розничная цена",
-        "price", "new price", "cost", "retail",
+        "price", "new price", "retail",
+    ],
+    "stock": [
+        "qoldiq", "qoldig", "soni", "miqdor", "miqdori", "nalichiya", "mavjud",
+        "количество в наличии", "количество", "наличие", "в наличии", "остаток",
+        "stock", "qty", "quantity", "on hand", "balance",
     ],
     "wholesale": [
         "ulgurji", "ulgurji narx", "ulgurji narxi", "optom",
@@ -54,19 +59,48 @@ def _norm_header(h) -> str:
     return re.sub(r"\s+", " ", s).strip()
 
 
+# valyutali ustunlar hech qachon narx sifatida olinmaydi
+FOREIGN = re.compile(r"\b(usd|у\.?е|дол|доллар|eur|евро|rub|₽|\$)\b|\busd\b", re.IGNORECASE)
+
+
+def _match_field(h: str) -> tuple[str, int] | None:
+    """Ustun sarlavhasi qaysi maydonga eng mos kelishini topadi.
+
+    Hamma maydon tekshiriladi: "Eski narx" ichida "narx" bor, lekin u
+    old_price bilan to'liq mos keladi — shuning uchun eng yaxshisi olinadi.
+    """
+    best = None
+    for field, aliases in COLUMN_ALIASES.items():
+        for rank, a in enumerate(aliases):
+            if h == a:
+                score = 100 - rank
+            elif h.startswith(a) or a in h:
+                score = 60 - rank
+            else:
+                continue
+            if best is None or score > best[1]:
+                best = (field, score)
+            break                      # shu maydonning eng yaxshi aliasi yetarli
+    return best
+
+
 def _map_columns(header_row) -> dict:
-    mapping = {}
+    """{maydon: ustun raqami}. Bir nechta nomzod bo'lsa — eng mosini oladi."""
+    best: dict[str, tuple[int, int]] = {}      # field -> (rank, idx)
     for idx, cell in enumerate(header_row):
         h = _norm_header(cell)
         if not h:
             continue
-        for field, aliases in COLUMN_ALIASES.items():
-            if field in mapping:
-                continue
-            if h in aliases or any(h.startswith(a) for a in aliases):
-                mapping[field] = idx
-                break
-    return mapping
+        hit = _match_field(h)
+        if hit is None:
+            continue
+        field, rank = hit
+        # dollar/evro ustuni narx sifatida olinmaydi
+        if field in ("price", "old_price", "wholesale") and FOREIGN.search(str(cell)):
+            continue
+        if field not in best or rank > best[field][0]:
+            best[field] = (rank, idx)
+    return {f: i for f, (_r, i) in best.items()}
 
 
 def _find_header(rows) -> tuple[int, dict]:
@@ -92,6 +126,34 @@ def clean_name(raw: str) -> str:
         prev = s
         s = CODE_PREFIX.sub("", s)
     return re.sub(r"\s{2,}", " ", s).strip(" -–—|")
+
+
+def category_from_filename(filename: str) -> str:
+    """'unitaz.xlsx' -> 'Unitaz'. Kategoriya ustuni bo'lmaganda ishlatiladi."""
+    stem = re.sub(r"\.[A-Za-z]+$", "", str(filename or "")).strip()
+    stem = re.sub(r"[_\-]+", " ", stem)
+    stem = re.sub(r"\(\s*\d+\s*\)", " ", stem)          # "narxlar (2)" -> "narxlar"
+    stem = re.sub(r"\b(prays|price|narx|narxlar|list|spisok|export|eksport)\b",
+                  " ", stem, flags=re.IGNORECASE)
+    stem = re.sub(r"[^\w\s'ʻ-]+", " ", stem, flags=re.UNICODE)
+    stem = re.sub(r"\s{2,}", " ", stem).strip()
+    if not stem or len(stem) < 3 or stem.isdigit():
+        return ""
+    return stem[:1].upper() + stem[1:]
+
+
+def _stock_value(v) -> float | None:
+    """Qoldiq ustunidagi qiymat. Aniqlab bo'lmasa None."""
+    if v in (None, ""):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = str(v).strip().replace(",", ".")
+    s = re.sub(r"[^\d.\-]", "", s)
+    try:
+        return float(s) if s not in ("", "-", ".") else None
+    except ValueError:
+        return None
 
 
 def guess_category(name: str) -> str:
@@ -186,7 +248,8 @@ def parse(data: bytes, filename: str, default_category: str = "") -> tuple[list[
             "<code>Nomi | Kategoriya | Brend | Narx | Birlik | Eski narx | Izoh</code>"
         )
 
-    items, skipped = [], 0
+    items, skipped, out_of_stock = [], 0, 0
+    file_category = category_from_filename(filename)
     for row in rows[h_idx + 1:]:
         def cell(field):
             i = mapping.get(field)
@@ -198,13 +261,21 @@ def parse(data: bytes, filename: str, default_category: str = "") -> tuple[list[
         name = clean_name(cell("name"))
         if not name or _norm_header(name) in COLUMN_ALIASES["name"]:
             continue
+
+        # qoldig'i yo'q mahsulot kanalga chiqmaydi
+        if "stock" in mapping:
+            qty = _stock_value(row[mapping["stock"]] if mapping["stock"] < len(row) else None)
+            if qty is not None and qty <= 0:
+                out_of_stock += 1
+                continue
         price = _clean_price(row[mapping["price"]]) if "price" in mapping and mapping["price"] < len(row) else ""
         if not price and "wholesale" in mapping and mapping["wholesale"] < len(row):
             price = _clean_price(row[mapping["wholesale"]])
         old = _clean_price(row[mapping["old_price"]]) if "old_price" in mapping and mapping["old_price"] < len(row) else ""
         if not price:
             skipped += 1
-        category = cell("category") or default_category or guess_category(name)
+        category = (cell("category") or default_category
+                    or file_category or guess_category(name))
         brand = cell("brand") or guess_brand(name, category)
         items.append({
             "name": name,
@@ -218,6 +289,12 @@ def parse(data: bytes, filename: str, default_category: str = "") -> tuple[list[
 
     found = ", ".join(sorted(mapping)) or "—"
     msg = f"Topilgan ustunlar: <code>{found}</code>"
+    if "stock" in mapping:
+        msg += "\n📦 Qoldiq ustuni topildi — omborda yo'q mahsulotlar olinmadi"
+        if out_of_stock:
+            msg += f" ({out_of_stock} ta)"
     if skipped:
         msg += f"\n⚠️ {skipped} ta qatorda narx yo'q — ular navbatga chiqmaydi."
+    if not mapping.get("category") and file_category:
+        msg += f"\n📂 Kategoriya fayl nomidan olindi: <b>{file_category}</b>"
     return items, msg

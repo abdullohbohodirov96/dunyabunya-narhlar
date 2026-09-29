@@ -57,6 +57,12 @@ CREATE TABLE IF NOT EXISTS cat_log (
     post_count     INTEGER DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS cat_photo (
+    category  TEXT PRIMARY KEY,
+    file_id   TEXT,
+    added_at  TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_products_norm ON products(norm_name);
 CREATE INDEX IF NOT EXISTS idx_products_queue ON products(active, post_count, last_posted_at);
 """
@@ -432,6 +438,52 @@ async def mark_category_posted(name: str) -> None:
         (name, iso()),
     )
     await conn().commit()
+
+
+# ------------------------------------------------- kategoriya rasmlari
+async def set_cat_photo(category: str, file_id: str) -> None:
+    await conn().execute(
+        "INSERT INTO cat_photo (category, file_id, added_at) VALUES (?, ?, ?) "
+        "ON CONFLICT(category) DO UPDATE SET file_id = excluded.file_id, "
+        "added_at = excluded.added_at",
+        (category.strip(), file_id, iso()),
+    )
+    await conn().commit()
+
+
+async def get_cat_photo(category: str) -> str:
+    async with conn().execute(
+        "SELECT file_id FROM cat_photo WHERE LOWER(TRIM(category)) = LOWER(TRIM(?))",
+        (category,),
+    ) as cur:
+        row = await cur.fetchone()
+    return row["file_id"] if row else ""
+
+
+async def drop_cat_photo(category: str) -> bool:
+    cur = await conn().execute(
+        "DELETE FROM cat_photo WHERE LOWER(TRIM(category)) = LOWER(TRIM(?))", (category,))
+    await conn().commit()
+    return cur.rowcount > 0
+
+
+async def all_cat_photos() -> dict[str, str]:
+    async with conn().execute("SELECT category, file_id FROM cat_photo") as cur:
+        return {r["category"]: r["file_id"] for r in await cur.fetchall()}
+
+
+async def product_categories() -> list[str]:
+    """Mahsulotlardagi barcha kategoriyalar (guruhlashdan qat'i nazar)."""
+    async with conn().execute(
+        f"SELECT DISTINCT {CAT_SQL} c FROM products "
+        "WHERE active = 1 AND price <> '' ORDER BY c"
+    ) as cur:
+        return [r["c"] for r in await cur.fetchall()]
+
+
+async def categories_without_photo() -> list[str]:
+    have = {k.strip().lower() for k in (await all_cat_photos())}
+    return [c for c in await product_categories() if c.strip().lower() not in have]
 
 
 async def price_age_days() -> int | None:

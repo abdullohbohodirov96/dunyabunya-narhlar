@@ -50,7 +50,7 @@ HELP = """<b>🏗 dunyabunya — narxlar boti</b>
 /xodim 123456789 — xodimga mahsulot qo'shish ruxsatini berish\n/masul 123456789 — mas'ul xodimni belgilash
 /vaqt 09:00,11:30,14:00,16:30,19:00 — post vaqtlari
 /dokon dunyabunya | +998(91)785-00-90 | @kanal
-/logo — logo yuklash (keyingi rasmni logo qilib oladi)
+/rasm — kategoriyaga rasm qo'yish · /rasmlar — holati\n/logo — logo yuklash (keyingi rasmni logo qilib oladi)
 /fon — post rasmining orqa foni\n/rejim — post turi (rasm / pdf / mahsulot)\n/guruh — brend yoki kategoriya bo'yicha\n/dizayn — brend kartochkani yoqish/o'chirish
 /shablon — post matni shabloni\n/filial — filiallar va raqamlari\n/buyurtma — rasmdagi buyurtma raqami\n/aloqa — raqam bog'lanadigan havola
 /pauza · /davom — to'xtatish / davom ettirish\n/zaxirakanal — zaxira kanalini ulash\n/zaxira — bazani hoziroq saqlash
@@ -76,6 +76,7 @@ Narxlarni shu yerga yuborasiz, bot ularni kanalga o'zi joylaydi.
 /navbat — navbatda nechta mahsulot bor
 /royxat — ro'yxatni ko'rish
 /korish — keyingi post qanday chiqishini ko'rish
+/rasm — kategoriyaga rasm qo'yish
 /statistika — bugungi holat
 /id — o'z raqamingiz
 """
@@ -512,7 +513,7 @@ async def cmd_theme(msg: Message, command: CommandObject):
         return
     category, items = picked
     settings = await db.all_settings()
-    cards = await poster.build_category_cards(category, items, settings)
+    cards = await poster.build_category_cards(category, items, settings, msg.bot)
     await msg.answer_photo(
         BufferedInputFile(cards[0], filename="fon.png"),
         caption=f"✅ Fon: <b>{names[arg]}</b>\n<i>Namuna — kanalga joylanmadi</i>",
@@ -530,6 +531,62 @@ async def cmd_design(msg: Message):
         "🎨 Brend kartochka <b>yoqildi</b> — postlar dunyabunya dizaynida chiqadi."
         if new == "1" else
         "🖼 Brend kartochka <b>o'chirildi</b> — rasm o'z holicha yuboriladi."
+    )
+
+
+@router.message(Command("rasm"))
+async def cmd_cat_photo(msg: Message, command: CommandObject):
+    """Kategoriyaga rasm biriktirish."""
+    if await deny_staff(msg):
+        return
+    arg = (command.args or "").strip()
+    if not arg:
+        await msg.answer(
+            "🖼 <b>Kategoriyaga rasm qo'yish</b>\n\n"
+            "Eng oson yo'l: <b>rasmni tashlang, tagiga kategoriya nomini yozing</b>.\n"
+            "Masalan rasm + <code>Bazalt</code>\n\n"
+            "Yoki: <code>/rasm Bazalt</code> deb yozib, keyin rasmni tashlang.\n\n"
+            "Holatni ko'rish: /rasmlar"
+        )
+        return
+    if arg.lower().startswith(("ochir", "o'chir")):
+        name = arg.split(maxsplit=1)[1] if len(arg.split()) > 1 else ""
+        cat = await _match_category(name) or name
+        ok = await db.drop_cat_photo(cat)
+        await msg.answer(f"🗑 <b>{cat}</b> rasmi o'chirildi." if ok
+                         else f"❌ <b>{cat}</b> uchun rasm topilmadi.")
+        return
+
+    cat = await _match_category(arg)
+    if not cat:
+        cats = await db.product_categories()
+        await msg.answer(
+            f"❌ <b>{arg}</b> degan kategoriya topilmadi.\n\n"
+            + ("Mavjudlari: " + ", ".join(cats[:12]) if cats else
+               "Avval Excel fayl yuboring.")
+        )
+        return
+    await db.add_draft(msg.from_user.id, name=cat, need="catphoto")
+    await msg.answer(f"🖼 Endi <b>{cat}</b> uchun rasmni yuboring.\nBekor qilish: /tozala")
+
+
+@router.message(Command("rasmlar"))
+async def cmd_cat_photos(msg: Message):
+    """Qaysi kategoriyada rasm bor, qaysisida yo'q."""
+    if await deny_staff(msg):
+        return
+    cats = await db.product_categories()
+    if not cats:
+        await msg.answer("Bazada mahsulot yo'q. Avval Excel fayl yuboring.")
+        return
+    have = {k.strip().lower() for k in (await db.all_cat_photos())}
+    lines = [("🖼 " if c.strip().lower() in have else "⬜️ ") + c for c in cats]
+    missing = [c for c in cats if c.strip().lower() not in have]
+    await msg.answer(
+        "<b>Kategoriya rasmlari</b>\n" + "\n".join(lines[:30])
+        + ("\n…" if len(lines) > 30 else "")
+        + (f"\n\n{len(missing)} tasida rasm yo'q. Rasmni tashlab, tagiga "
+           "kategoriya nomini yozing." if missing else "\n\nHammasida rasm bor ✅")
     )
 
 
@@ -670,7 +727,7 @@ async def cmd_preview(msg: Message, command: CommandObject):
                 BufferedInputFile(data, filename=f"{category}.pdf"),
                 caption=caption + note)
         else:
-            cards = await poster.build_category_cards(category, items, settings)
+            cards = await poster.build_category_cards(category, items, settings, msg.bot)
             await msg.answer_photo(
                 BufferedInputFile(cards[0], filename="preview.jpg"),
                 caption=caption + note)
@@ -870,11 +927,13 @@ async def got_document(msg: Message):
     doc = msg.document
     name = (doc.file_name or "").lower()
     if not name.endswith((".xlsx", ".xlsm", ".xltx", ".csv", ".tsv", ".txt")):
-        await msg.answer("📄 Faqat <b>.xlsx</b> yoki <b>.csv</b> fayl qabul qilaman.\n"
-                         "PDF bo'lsa — Excel'ga o'girib yuboring.")
+        await msg.answer(
+            f"📄 <b>{doc.file_name}</b> qabul qilindi, lekin bu formatni o'qiy olmayman.\n\n"
+            "Excel (<b>.xlsx</b>) yoki <b>.csv</b> qilib yuboring — "
+            "PDF bo'lsa Excel'ga o'girib bering.")
         return
 
-    status = await msg.answer("⏳ Fayl o'qilmoqda…")
+    status = await msg.answer("✅ <b>Fayl qabul qilindi</b> — o'qiyapman…")
     buf = io.BytesIO()
     await msg.bot.download(doc, destination=buf)
 
@@ -917,6 +976,19 @@ async def got_document(msg: Message):
         "<b>tagiga kategoriya nomini yozing</b>.\n\n"
         "Ko'rish: <code>/korish</code>  ·  Hoziroq joylash: <code>/hozir</code>"
     )
+
+    # rasmi yo'q kategoriyalar bo'lsa — so'raymiz
+    missing = await db.categories_without_photo()
+    if missing:
+        await msg.answer(
+            "🖼 <b>Bu kategoriyalarga rasm yo'q:</b>\n"
+            + "\n".join(f"• {c}" for c in missing[:10])
+            + ("\n…" if len(missing) > 10 else "")
+            + "\n\nRasm yubormoqchi bo'lsangiz — <b>rasmni tashlang va tagiga "
+              "kategoriya nomini yozing</b> (masalan: <code>Bazalt</code>).\n"
+              "Bitta rasm butun kategoriyaga ishlaydi, har brendga alohida shart emas.\n\n"
+              "Rasmsiz ham bo'laveradi — postlar baribir chiqadi."
+        )
     await backup.save(msg.bot, "excel import")
     await poster.alert_empty(msg.bot)
 
@@ -943,7 +1015,29 @@ async def got_photo(msg: Message):
             await msg.answer(f"❌ Logo saqlanmadi: <code>{e}</code>")
         return
 
-    caption = msg.caption or ""
+    caption = (msg.caption or "").strip()
+
+    # /rasm buyrug'idan keyin kutilayotgan kategoriya rasmi
+    if draft and draft["need"] == "catphoto":
+        await db.drop_cat_photo(draft["name"])
+        await db.set_cat_photo(draft["name"], file_id)
+        await db.drop_draft(draft["id"])
+        await msg.answer(f"✅ <b>{draft['name']}</b> kategoriyasiga rasm qo'yildi.\n"
+                         f"Ko'rish: <code>/korish</code>")
+        return
+
+    # tagiga kategoriya nomi yozilgan bo'lsa — o'sha kategoriyaning rasmi
+    if caption:
+        cat = await _match_category(caption)
+        if cat:
+            await db.set_cat_photo(cat, file_id)
+            await msg.answer(
+                f"🖼 Rasm <b>{cat}</b> kategoriyasiga qo'yildi.\n"
+                "Shu kategoriyadagi hamma post shu rasm bilan chiqadi.\n\n"
+                "Ko'rish: <code>/korish</code>"
+            )
+            return
+
     data = parsing.parse_caption(caption)
 
     if not data.get("name"):
@@ -953,6 +1047,21 @@ async def got_photo(msg: Message):
         return
 
     await _save_product(msg, data, file_id)
+
+
+async def _match_category(text: str) -> str:
+    """Matn mavjud kategoriya nomiga to'g'ri kelsa — o'sha nomni qaytaradi."""
+    from matching import best_match, normalize
+
+    text = text.strip()
+    if not text or len(text.split()) > 4:
+        return ""
+    cats = await db.product_categories()
+    if not cats:
+        return ""
+    exact = {normalize(c): c for c in cats}
+    hit = best_match(text, exact, threshold=88)
+    return hit or ""
 
 
 async def _save_product(msg: Message, data: dict, file_id: str = ""):

@@ -114,11 +114,29 @@ def _card_settings(settings: dict) -> dict:
     return s
 
 
-async def build_category_cards(category: str, items: list[dict], settings: dict) -> list[bytes]:
+async def banner_for(bot: Bot | None, items: list[dict]) -> bytes | None:
+    """Kartochka tepasidagi rasm — eng ko'p mahsuloti bor kategoriyaniki."""
+    if bot is None or not items:
+        return None
+    counts: dict[str, int] = {}
+    for it in items:
+        cat = (it.get("category") or "").strip()
+        if cat:
+            counts[cat] = counts.get(cat, 0) + 1
+    for cat in sorted(counts, key=counts.get, reverse=True):
+        file_id = await db.get_cat_photo(cat)
+        if file_id:
+            return await _download(bot, file_id)
+    return None
+
+
+async def build_category_cards(category: str, items: list[dict], settings: dict,
+                               bot: Bot | None = None) -> list[bytes]:
     """Brend narxlarini bir nechta PNG kartochkaga bo'lib chizadi."""
     pages = cardmaker.split_pages(items)[:10]
     s = _card_settings(settings)
-    return [cardmaker.make_list_card(category, chunk, s, i + 1, len(pages))
+    banner = await banner_for(bot, items)
+    return [cardmaker.make_list_card(category, chunk, s, i + 1, len(pages), banner)
             for i, chunk in enumerate(pages)]
 
 
@@ -150,7 +168,7 @@ async def post_category(bot: Bot, settings: dict, channel: str) -> str:
             await _after_category(bot, settings, category, items, msg)
             return f"✅ {category} — {len(items)} ta mahsulot (PDF)"
 
-        cards = await build_category_cards(category, items, settings)
+        cards = await build_category_cards(category, items, settings, bot)
         safe = "".join(ch if ch.isalnum() else "_" for ch in category).strip("_")
         files = [BufferedInputFile(c, filename=f"dunyabunya_{safe}_{i + 1}.png")
                  for i, c in enumerate(cards)]

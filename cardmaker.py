@@ -313,6 +313,7 @@ def make_card(product: dict, settings: dict, photo_bytes: bytes | None = None) -
 MAX_ROWS = 18
 ROW_H = 76
 SECTION_H = 62
+BANNER_H = 320        # kategoriya rasmi balandligi
 BAND_H = 236          # yuqoridagi to'q chiziq (logo oq bo'lgani uchun kerak)
 FOOT_H = 186          # pastki chiziq: buyurtma raqami
 
@@ -450,7 +451,7 @@ def _draw_row(draw, item: dict, top: int, zebra: bool, t: dict) -> None:
 
 
 def make_list_card(title: str, items: list[dict], settings: dict,
-                   page: int = 1, pages: int = 1) -> bytes:
+                   page: int = 1, pages: int = 1, banner: bytes | None = None) -> bytes:
     """Bitta brend narxlari — jadval ko'rinishidagi PNG."""
     t = theme_of(settings)
     shop = (settings.get("shop_name") or "dunyabunya").strip()
@@ -466,8 +467,9 @@ def make_list_card(title: str, items: list[dict], settings: dict,
     head_h = BAND_H + 14 if light else 250
     title_h = 150
     foot_h = FOOT_H + 20
+    banner_h = (BANNER_H + 30) if banner else 0
     body_h = len(items) * ROW_H + (len(sections) * SECTION_H if many else 0)
-    height = max(940, head_h + title_h + body_h + foot_h)
+    height = max(940, head_h + banner_h + title_h + body_h + foot_h)
 
     img = _background_theme(height, t)
     draw = ImageDraw.Draw(img)
@@ -481,8 +483,21 @@ def make_list_card(title: str, items: list[dict], settings: dict,
                            radius=27, outline=ORANGE, width=3)
     draw.text((W - PAD - bw / 2, PAD + 18 + 27), badge, font=f_badge, fill=ORANGE, anchor="mm")
 
+    # --- kategoriya rasmi (bo'lsa)
+    y = (BAND_H + 30) if light else (logo_bottom + 40)
+    if banner:
+        try:
+            src = Image.open(io.BytesIO(banner))
+            photo = _cover(src, W - 2 * PAD, BANNER_H)
+            img.paste(photo, (PAD, y), _round_mask(photo.size, 28))
+            draw.rounded_rectangle([PAD, y, W - PAD - 1, y + BANNER_H - 1],
+                                   radius=28, outline=(0, 0, 0, 40), width=2)
+            y += BANNER_H + 30
+        except Exception:
+            pass
+
     # --- brend sarlavhasi
-    y = (BAND_H + 40) if light else (logo_bottom + 52)
+    y += 10 if light else 12
     lines, f_cat = _fit_lines(draw, title.upper(), W - 2 * PAD, 72, True, 2)
     for ln in lines:
         draw.text((PAD, y), ln, font=f_cat, fill=t["text"])
