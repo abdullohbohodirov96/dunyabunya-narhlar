@@ -1117,7 +1117,7 @@ async def _save_product(msg: Message, data: dict, file_id: str = ""):
 
 
 # ---------------------------------------------------------------- matn
-@router.message(F.text & ~F.text.startswith("/"))
+@router.message(F.text & ~F.text.startswith("/") & ~F.text.in_(menus.LABELS))
 async def got_text(msg: Message):
     if await deny_staff(msg):
         return

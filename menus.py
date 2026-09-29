@@ -22,6 +22,12 @@ STAFF = ReplyKeyboardMarkup(
 )
 
 
+# Barcha pastki tugmalar matni — "Tushunmadim" filtri shularni o'tkazib yuboradi.
+LABELS = frozenset(
+    b.text for kb in (MAIN, STAFF) for row in kb.keyboard for b in row
+)
+
+
 def _b(text: str, data: str) -> InlineKeyboardButton:
     return InlineKeyboardButton(text=text, callback_data=data)
 
