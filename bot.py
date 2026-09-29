@@ -13,6 +13,7 @@ from aiogram.enums import ParseMode
 import backup
 import db
 import handlers
+import poster
 import scheduler
 from config import ADMIN_IDS, BACKUP_CHAT, BOT_TOKEN, SELF_URL, TZ_NAME
 
@@ -72,7 +73,7 @@ async def main() -> None:
                 admin,
                 "🟢 <b>Bot ishga tushdi</b>\n"
                 f"⏰ Jadval: <code>{await db.get('post_times')}</code>\n"
-                f"📦 Navbatda: {await db.queue_left()} ta"
+                + await poster.queue_summary()
                 + (f"\n💾 {restored}" if BACKUP_CHAT else ""),
             )
         except Exception:

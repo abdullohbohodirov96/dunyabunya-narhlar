@@ -645,19 +645,8 @@ async def cmd_queue(msg: Message):
     nxt = scheduler.next_runs(3)
     age = await db.price_age_days()
 
-    if settings.get("post_mode", "pdf") != "mahsulot":
-        cats = await db.categories()
-        picked = await db.pick_next_category()
-        body = (
-            f"📂 Kategoriyalar: <b>{len(cats)}</b> ta\n"
-            f"🔄 Har kategoriya ~{max(1, len(cats) // per_day)} kunda bir marta "
-            f"(kuniga {per_day} ta post)\n"
-            + (f"➡️ Keyingisi: <b>{picked[0]}</b> ({len(picked[1])} ta mahsulot)\n" if picked else "")
-        )
-    else:
-        ready = await db.ready_count()
-        body = (f"✅ Postga tayyor: <b>{ready}</b> ta mahsulot\n"
-                f"📅 Yetadi: ~{ready // per_day} kunga\n")
+    body = await poster.queue_summary(settings) + "\n"
+    body += f"📅 Kuniga {per_day} ta post\n"
 
     await msg.answer(
         "📦 <b>Navbat</b>\n\n" + body

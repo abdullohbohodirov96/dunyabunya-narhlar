@@ -245,6 +245,26 @@ async def post_pricebook(bot: Bot, chat_id: str | None = None) -> str:
     return f"✅ Prays-list joylandi ({count} ta mahsulot)."
 
 
+async def queue_summary(settings: dict | None = None) -> str:
+    """Navbat holatini odam tushunadigan qilib yozadi."""
+    settings = settings or await db.all_settings()
+    if settings.get("post_mode", "rasm") == "mahsulot":
+        left = await db.ready_count()
+        return f"📦 Navbatda: {left} ta mahsulot"
+
+    st = await db.groups_status()
+    per_day = max(1, len([t for t in (settings.get("post_times") or "").split(",") if t.strip()]))
+    days = max(1, round(st["total"] / per_day))
+
+    lines = [f"📦 {st['total']} ta {st['unit']} navbatda aylanadi"]
+    if st["never"]:
+        lines.append(f"🆕 {st['never']} tasi hali umuman chiqmagan")
+    if st["next_name"]:
+        lines.append(f"➡️ Keyingisi: <b>{st['next_name']}</b> ({st['next_count']} ta mahsulot)")
+    lines.append(f"🔄 Har {st['unit']} ~{days} kunda bir marta chiqadi")
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------- eslatma
 def _hm(s: str, default):
     try:
@@ -334,8 +354,8 @@ async def daily_report(bot: Bot) -> None:
     lines += ["", f"📊 Reja: {plan} ta · Bajarildi: {len(posts)} ta"]
     if len(posts) < plan:
         lines.append(f"⚠️ {plan - len(posts)} ta post qolib ketdi.")
-    prays = settings.get("post_mode", "pdf") != "mahsulot"
-    lines.append(f"📦 Navbatda: {left} ta " + ("kategoriya" if prays else "mahsulot"))
+    prays = settings.get("post_mode", "rasm") != "mahsulot"
+    lines.append(await queue_summary(settings))
     if left == 0:
         lines.append("\n🔴 Narx qolmadi — yangi ro'yxat yuboring!")
     elif not prays and left < plan:

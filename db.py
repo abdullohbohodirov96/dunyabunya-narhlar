@@ -496,6 +496,24 @@ async def price_age_days() -> int | None:
     return None if d is None else (now() - d).days
 
 
+async def groups_status() -> dict:
+    """Navbat holati: jami guruh, hali chiqmagani, keyingisi."""
+    cats = await categories()
+    async with conn().execute(
+        "SELECT category, post_count FROM cat_log") as cur:
+        posted = {r["category"]: r["post_count"] or 0 for r in await cur.fetchall()}
+
+    never = [c for c in cats if posted.get(c, 0) == 0]
+    picked = await pick_next_category()
+    return {
+        "total": len(cats),
+        "never": len(never),
+        "next_name": picked[0] if picked else "",
+        "next_count": len(picked[1]) if picked else 0,
+        "unit": "brend" if (await get("group_by", "brend")) == "brend" else "kategoriya",
+    }
+
+
 async def queue_left() -> int:
     """Rejimga qarab: navbatdagi kategoriya yoki mahsulot soni."""
     if (await get("post_mode", "pdf")) in ("pdf", "rasm", "prays"):
