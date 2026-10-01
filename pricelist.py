@@ -63,6 +63,11 @@ def _norm_header(h) -> str:
 # valyutali ustunlar hech qachon narx sifatida olinmaydi
 FOREIGN = re.compile(r"\b(usd|у\.?е|дол|доллар|eur|евро|rub|₽|\$)\b|\busd\b", re.IGNORECASE)
 
+# foiz / kurs / ustama ustunlari ham narx emas ("Ulgurji margin" = 10, narx emas)
+NOT_PRICE = re.compile(
+    r"margin|ustama|foiz|%|кур[сc]|kurs|procent|процент|надбавка|наценк|скидк|discount",
+    re.IGNORECASE)
+
 
 def _match_field(h: str) -> tuple[str, int] | None:
     """Ustun sarlavhasi qaysi maydonga eng mos kelishini topadi.
@@ -96,8 +101,9 @@ def _map_columns(header_row) -> dict:
         if hit is None:
             continue
         field, rank = hit
-        # dollar/evro ustuni narx sifatida olinmaydi
-        if field in ("price", "old_price", "wholesale") and FOREIGN.search(str(cell)):
+        # dollar/evro, foiz va ustama ustunlari narx sifatida olinmaydi
+        if field in ("price", "old_price", "wholesale") and (
+                FOREIGN.search(str(cell)) or NOT_PRICE.search(str(cell))):
             continue
         if field not in best or rank > best[field][0]:
             best[field] = (rank, idx)
