@@ -934,8 +934,10 @@ async def got_document(msg: Message):
     if await deny_staff(msg):
         return
     doc = msg.document
-    name = (doc.file_name or "").lower()
-    if not name.endswith((".xlsx", ".xlsm", ".xltx", ".csv", ".tsv", ".txt")):
+    name = (doc.file_name or "fayl.xlsx").lower()
+    # o'qib bo'lmaydigani aniq bo'lgan formatlar
+    if name.endswith((".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png", ".zip",
+                      ".rar", ".7z", ".mp4", ".heic", ".webp", ".pptx")):
         await msg.answer(
             f"📄 <b>{doc.file_name}</b> qabul qilindi, lekin bu formatni o'qiy olmayman.\n\n"
             "Excel (<b>.xlsx</b>) yoki <b>.csv</b> qilib yuboring — "
@@ -944,11 +946,26 @@ async def got_document(msg: Message):
 
     status = await msg.answer("✅ <b>Fayl qabul qilindi</b> — o'qiyapman…")
     buf = io.BytesIO()
-    await msg.bot.download(doc, destination=buf)
+    try:
+        await msg.bot.download(doc, destination=buf)
+    except Exception as e:                      # noqa: BLE001
+        log.exception("fayl yuklab olinmadi")
+        await status.edit_text(
+            "❌ Faylni Telegram'dan yuklab ola olmadim.\n"
+            "Qaytadan yuborib ko'ring — fayl 20 MB dan kichik bo'lsin.\n"
+            f"<i>({type(e).__name__})</i>")
+        return
 
     # fayl tagiga kategoriya yozilgan bo'lsa — hamma qatorga o'sha qo'llanadi
     caption = (msg.caption or "").strip()
-    items, info = pricelist.parse(buf.getvalue(), name, default_category=caption)
+    try:
+        items, info = pricelist.parse(buf.getvalue(), name, default_category=caption)
+    except Exception as e:                      # noqa: BLE001
+        log.exception("faylni o'qishda xato")
+        await status.edit_text(
+            f"❌ Faylni o'qishda xato: <i>{type(e).__name__}</i>\n\n"
+            "Excel'da ochib <b>«Сохранить как» → .xlsx</b> qilib qayta yuboring.")
+        return
     if not items:
         await status.edit_text(info)
         return
