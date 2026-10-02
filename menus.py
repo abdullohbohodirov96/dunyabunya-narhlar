@@ -43,7 +43,7 @@ def settings_menu(s: dict) -> InlineKeyboardMarkup:
         [_b("🖼 Post turi", "m:rejim"), _b("🏷 Guruhlash", "m:guruh")],
         [_b("🎨 Fon rangi", "m:fon"), _b("⏰ Post vaqtlari", "m:vaqt")],
         [_b("🏬 Filiallar", "m:filial"), _b("📞 Buyurtma raqami", "m:buyurtma")],
-        [_b("🖼 Kategoriya rasmlari", "m:rasmlar"), _b("👥 Xodimlar", "m:xodim")],
+        [_b("👥 Xodimlar", "m:xodim")],
         [_b("▶️ Davom ettirish" if paused else "⏸ To'xtatish",
             "act:davom" if paused else "act:pauza")],
         [_b("💾 Zaxira saqlash", "act:zaxira"), _b("📊 Statistika", "act:stat")],

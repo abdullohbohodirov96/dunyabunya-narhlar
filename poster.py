@@ -114,29 +114,12 @@ def _card_settings(settings: dict) -> dict:
     return s
 
 
-async def banner_for(bot: Bot | None, items: list[dict]) -> bytes | None:
-    """Kartochka tepasidagi rasm — eng ko'p mahsuloti bor kategoriyaniki."""
-    if bot is None or not items:
-        return None
-    counts: dict[str, int] = {}
-    for it in items:
-        cat = (it.get("category") or "").strip()
-        if cat:
-            counts[cat] = counts.get(cat, 0) + 1
-    for cat in sorted(counts, key=counts.get, reverse=True):
-        file_id = await db.get_cat_photo(cat)
-        if file_id:
-            return await _download(bot, file_id)
-    return None
-
-
 async def build_category_cards(category: str, items: list[dict], settings: dict,
                                bot: Bot | None = None) -> list[bytes]:
     """Brend narxlarini bir nechta PNG kartochkaga bo'lib chizadi."""
     pages = cardmaker.split_pages(items)[:10]
     s = _card_settings(settings)
-    banner = await banner_for(bot, items)
-    return [cardmaker.make_list_card(category, chunk, s, i + 1, len(pages), banner)
+    return [cardmaker.make_list_card(category, chunk, s, i + 1, len(pages))
             for i, chunk in enumerate(pages)]
 
 
@@ -306,7 +289,6 @@ async def alert_empty(bot: Bot, force: bool = False) -> None:
         return
 
     manager = (settings.get("manager_id") or "").strip()
-    no_photo = await db.no_photo_count()
     no_price = await db.no_price_count()
 
     unit_word = "mahsulot"
@@ -321,8 +303,6 @@ async def alert_empty(bot: Bot, force: bool = False) -> None:
     extra = []
     if no_price:
         extra.append(f"• {no_price} ta mahsulotda narx yo'q")
-    if no_photo:
-        extra.append(f"• {no_photo} ta mahsulotda rasm yo'q")
 
     text = (
         f"{head}\n\n"
